@@ -135,23 +135,6 @@
     width:1.9rem; height:1.9rem; border-radius:9999px; display:flex; align-items:center; justify-content:center;
     font-size:.7rem; font-weight:800; letter-spacing:.02em; flex-shrink:0;
   }
-
-  /* Canyon-frame: border colors sampled from the river-basin photo —
-     dusty mauve mesa tone at top, rust/terracotta canyon-wall tones
-     down the sides — framing the Invoices / Aging Summary tab content. */
-  .canyon-frame{
-    border-style: solid;
-    border-width: 5px;
-    border-image-slice: 1;
-    border-image-source: linear-gradient(180deg,
-      rgb(202,167,172) 0%,
-      rgb(178,132,112) 22%,
-      rgb(158,107,73) 55%,
-      rgb(189,136,89) 100%);
-    border-radius: 1rem;
-    padding: 1.25rem 1.25rem 1.5rem;
-    background: linear-gradient(180deg, rgba(202,167,172,0.07), rgba(255,253,248,0) 30%);
-  }
 </style>
 </head>
 <body class="min-h-screen text-stone-700">
@@ -475,7 +458,7 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel) {
         total_ar: totalAR,
         customer_totals: customerTotals,
     });
-    return { total: rows.length, added: addedCount, removed: toRemove.length };
+    return { total: rows.length, added: addedCount, removed: toRemove.length, totalAR };
 }
 function UploadButton({ profile, onDone }) {
     const fileRef = useRef(null);
@@ -493,7 +476,7 @@ function UploadButton({ profile, onDone }) {
             const parsed = parseAgedARWorkbook(wb);
             const label = new Date().toISOString().slice(0, 10);
             const result = await syncInvoices(parsed, profile.display_name, label);
-            setMsg({ ok: true, text: `Synced ${result.total} invoices — ${result.added} new, ${result.removed} removed (paid/written off).` });
+            setMsg({ ok: true, text: `Synced ${result.total} invoices (${fmtMoney(result.totalAR)} total) — ${result.added} new, ${result.removed} removed (paid/written off).` });
             onDone();
         }
         catch (err) {
@@ -509,7 +492,7 @@ function UploadButton({ profile, onDone }) {
     return (React.createElement("div", { className: "relative" },
         React.createElement("input", { ref: fileRef, type: "file", accept: ".xlsx,.xls", className: "hidden", onChange: handleFile }),
         React.createElement("button", { className: "btn btn-primary", disabled: busy, onClick: () => fileRef.current.click() }, busy ? "Syncing…" : "⬆ Upload Weekly Aged AR"),
-        msg && (React.createElement("div", { className: "absolute right-0 mt-2 w-72 text-xs rounded-lg p-3 z-10 " + (msg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-300" : "bg-red-50 text-red-700 border border-red-300") },
+        msg && (React.createElement("div", { className: "absolute right-0 mt-2 w-80 text-xs rounded-lg p-3 z-10 " + (msg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-300" : "bg-red-50 text-red-700 border border-red-300") },
             msg.text,
             React.createElement("button", { className: "block mt-1 text-stone-500 underline", onClick: () => setMsg(null) }, "dismiss")))));
 }
@@ -850,9 +833,9 @@ function AgingSummary({ invoices, onViewCustomerNotes }) {
             React.createElement(AgingBandChart, { grandTotals: grandTotals, priorTotals: priorTotals }),
             React.createElement(TopCustomersChart, { byCustomer: byCustomer, grandTotal: grandTotals.total, priorByCustomer: priorByCustomer, priorGrandTotal: priorTotals ? priorTotals.total : null })),
         React.createElement("div", { className: "glass rounded-xl overflow-hidden" },
-            React.createElement("div", { className: "sticky top-16 z-20 grid grid-cols-12 gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 backdrop-blur-md", style: {
-                    background: "linear-gradient(90deg, rgba(63,110,107,0.16), rgba(138,111,168,0.12))",
-                    borderColor: "rgba(63,110,107,0.35)",
+            React.createElement("div", { className: "sticky top-[68px] z-20 grid grid-cols-12 gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 backdrop-blur-md", style: {
+                    background: "linear-gradient(90deg, rgba(224,234,219,0.98), rgba(228,220,238,0.98))",
+                    borderColor: "rgba(63,110,107,0.45)",
                     color: "var(--neon-cyan)",
                     textShadow: "0 0 10px rgba(63,110,107,0.18)",
                 } },
@@ -1069,7 +1052,15 @@ function Dashboard({ profile, onSignOut }) {
             React.createElement("div", { className: "flex gap-2 mb-4" },
                 React.createElement("button", { className: "btn " + (view === "invoices" ? "btn-primary" : "btn-ghost"), onClick: () => setView("invoices") }, "Invoices"),
                 React.createElement("button", { className: "btn " + (view === "summary" ? "btn-primary" : "btn-ghost"), onClick: () => setView("summary") }, "Aging Summary")),
-            React.createElement("div", { className: "canyon-frame" }, view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes }))) : (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: {
+                    borderStyle: "solid",
+                    borderWidth: "8px",
+                    borderImageSlice: 1,
+                    borderImageSource: "linear-gradient(180deg, rgb(202,167,172) 0%, rgb(178,132,112) 22%, rgb(158,107,73) 55%, rgb(189,136,89) 100%)",
+                    borderRadius: "1rem",
+                    padding: "1.5rem 1.5rem 1.75rem",
+                    background: "linear-gradient(180deg, rgba(202,167,172,0.08), rgba(255,253,248,0) 30%)",
+                } }, view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes }))) : (React.createElement(React.Fragment, null,
                 React.createElement("div", { className: "flex flex-wrap items-center gap-3 mb-4" },
                     React.createElement("input", { className: "input flex-1 min-w-[220px]", placeholder: "Search customer, invoice #, or PO\u2026", value: search, onChange: e => setSearch(e.target.value) }),
                     React.createElement("select", { className: "input", value: customerFilter, onChange: e => setCustomerFilter(e.target.value) },
