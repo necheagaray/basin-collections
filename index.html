@@ -440,7 +440,7 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
                 React.createElement("button", { className: "btn btn-ghost", onClick: onClose }, "Cancel"),
                 React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : `Add to ${invoiceIds.length} invoice${invoiceIds.length > 1 ? "s" : ""}`)))));
 }
-function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, defaultOpen, onBulkAddNote, profile }) {
+function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, defaultOpen, onBulkAddNote, profile, onViewCustomerNotes }) {
     const [open, setOpen] = useState(defaultOpen);
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
@@ -476,6 +476,7 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
                     invoices.length > 1 ? "s" : ""),
                 maxAge > 75 && React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold age-chip-danger" }, "OVERDUE")),
             React.createElement("div", { className: "flex items-center gap-3" },
+                React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); onViewCustomerNotes(name, invoices); } }, "\uD83D\uDCCB Notes"),
                 canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); selectMode ? exitSelectMode() : setSelectMode(true); } }, selectMode ? "Cancel" : "Select")),
                 React.createElement("span", { className: "font-bold", style: { color: "var(--neon-cyan)" } }, fmtMoney(total)))),
         open && (React.createElement("div", { className: "border-t border-slate-700/60 pb-1" },
@@ -518,28 +519,135 @@ const BUCKET_META = {
     b46: { label: "46–75 Days", color: "var(--neon-amber)", chip: "age-chip-watch" },
     b76: { label: "76+ Days", color: "var(--neon-pink)", chip: "age-chip-danger" },
 };
-function AgingSummary({ invoices, onSelectCustomer }) {
-    const byCustomer = useMemo(() => {
+const CUSTOMER_PALETTE = ["#22e5ff", "#ff2fb0", "#ffb020", "#26ffb0", "#a78bfa"];
+function HorizontalBarRow({ label, value, share, color }) {
+    return (React.createElement("div", { className: "mb-3 last:mb-0" },
+        React.createElement("div", { className: "flex items-center justify-between text-xs mb-1 gap-2" },
+            React.createElement("span", { className: "text-slate-300 font-medium truncate" }, label),
+            React.createElement("span", { className: "text-slate-400 flex-shrink-0" },
+                fmtMoney(value),
+                " \u00B7 ",
+                Math.round(share),
+                "%")),
+        React.createElement("div", { className: "w-full h-3 rounded-full bg-slate-800/80 overflow-hidden" },
+            React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
+}
+function AgingBandChart({ grandTotals }) {
+    return (React.createElement("div", { className: "glass rounded-xl p-4" },
+        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-slate-500 mb-3" }, "Total A/R by Aging Band"),
+        ["b0", "b46", "b76"].map(key => {
+            const meta = BUCKET_META[key];
+            const share = grandTotals.total > 0 ? (grandTotals[key] / grandTotals.total * 100) : 0;
+            return React.createElement(HorizontalBarRow, { key: key, label: meta.label, value: grandTotals[key], share: share, color: meta.color });
+        })));
+}
+function TopCustomersChart({ byCustomer, grandTotal }) {
+    const sorted = useMemo(() => [...byCustomer].sort((a, b) => b.total - a.total), [byCustomer]);
+    const top5 = sorted.slice(0, 5);
+    const rest = sorted.slice(5);
+    const restTotal = rest.reduce((s, c) => s + c.total, 0);
+    return (React.createElement("div", { className: "glass rounded-xl p-4" },
+        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-slate-500 mb-3" }, "Total A/R \u2014 Top 5 Customers vs. All Others"),
+        top5.map((c, i) => {
+            const share = grandTotal > 0 ? (c.total / grandTotal * 100) : 0;
+            return React.createElement(HorizontalBarRow, { key: c.name, label: c.name, value: c.total, share: share, color: CUSTOMER_PALETTE[i % CUSTOMER_PALETTE.length] });
+        }),
+        rest.length > 0 && (React.createElement(HorizontalBarRow, { label: "All Others (" + rest.length + ")", value: restTotal, share: grandTotal > 0 ? (restTotal / grandTotal * 100) : 0, color: "#475569" }))));
+}
+/* ============================================================
+   CUSTOMER NOTES MODAL — every note, grouped by invoice, for
+   one customer. Used from both the Invoices tab and the Aging
+   Summary tab.
+   ============================================================ */
+function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices }) {
+    const [notesByInvoice, setNotesByInvoice] = useState({});
+    const [loadingNotes, setLoadingNotes] = useState(true);
+    useEffect(() => {
+        let cancelled = false;
+        async function load() {
+            setLoadingNotes(true);
+            const ids = invoices.map(i => i.id);
+            if (ids.length === 0) {
+                setLoadingNotes(false);
+                return;
+            }
+            const { data, error } = await db.from('notes').select('*').in('invoice_id', ids).order('created_at', { ascending: false });
+            if (!cancelled && !error) {
+                const map = {};
+                (data || []).forEach(n => { (map[n.invoice_id] = map[n.invoice_id] || []).push(n); });
+                setNotesByInvoice(map);
+            }
+            if (!cancelled)
+                setLoadingNotes(false);
+        }
+        load();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line
+    }, [customerName]);
+    const sortedInvoices = useMemo(() => [...invoices].sort((a, b) => computeAge(b.invoice_date) - computeAge(a.invoice_date)), [invoices]);
+    const totalBalance = invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0);
+    return (React.createElement("div", { className: "fixed inset-0 z-50 flex items-center justify-center px-4" },
+        React.createElement("div", { className: "absolute inset-0 bg-black/70", onClick: onClose }),
+        React.createElement("div", { className: "relative w-full max-w-2xl max-h-[85vh] glass rounded-2xl p-6 overflow-y-auto pop-in" },
+            React.createElement("div", { className: "flex items-start justify-between mb-1 gap-3" },
+                React.createElement("div", null,
+                    React.createElement("h2", { className: "text-lg font-bold text-white" }, customerName),
+                    React.createElement("p", { className: "text-xs text-slate-500" },
+                        invoices.length,
+                        " invoice",
+                        invoices.length > 1 ? "s" : "",
+                        " \u00B7 ",
+                        fmtMoney(totalBalance),
+                        " total open")),
+                React.createElement("button", { onClick: onClose, className: "btn btn-ghost !px-2 !py-1 flex-shrink-0" }, "\u2715")),
+            onGoToInvoices && (React.createElement("button", { className: "btn btn-ghost !text-xs mt-2 mb-4", onClick: onGoToInvoices }, "View in Invoices tab \u2192")),
+            loadingNotes ? (React.createElement("div", { className: "text-center text-slate-500 py-10" }, "Loading notes\u2026")) : (React.createElement("div", { className: "space-y-3 mt-2" }, sortedInvoices.map(inv => {
+                const notes = notesByInvoice[inv.id] || [];
+                const age = computeAge(inv.invoice_date);
+                return (React.createElement("div", { key: inv.id, className: "border border-slate-700/60 rounded-xl p-3" },
+                    React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 mb-2" },
+                        React.createElement("div", { className: "font-mono text-sm text-slate-200" }, inv.document_number),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(age) },
+                                age,
+                                "d"),
+                            React.createElement("span", { className: "text-sm font-semibold text-slate-100" }, fmtMoney(inv.open_balance)))),
+                    notes.length === 0 ? (React.createElement("div", { className: "text-xs text-slate-500 italic" }, "No notes yet")) : (React.createElement("div", { className: "space-y-1.5" }, notes.map(n => (React.createElement("div", { key: n.id, className: "flex gap-2 text-sm" },
+                        React.createElement("div", { className: "avatar flex-shrink-0", style: { width: "1.5rem", height: "1.5rem", fontSize: ".6rem", background: initialsColor(n.author_initials), color: "#04141a" } }, n.author_initials),
+                        React.createElement("div", { className: "min-w-0" },
+                            React.createElement("span", { className: "text-slate-500 text-xs mr-2" }, fmtDateTime(n.created_at)),
+                            React.createElement("span", { className: "text-slate-300 break-words" }, n.body)))))))));
+            }))))));
+}
+function AgingSummary({ invoices, onViewCustomerNotes }) {
+    const grouped = useMemo(() => {
         const map = {};
         invoices.forEach(inv => {
             var _a;
             const name = ((_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name) || "Unknown";
-            const age = computeAge(inv.invoice_date);
-            const bucket = bucketFor(age);
-            if (!map[name])
-                map[name] = { name, b0: 0, b46: 0, b76: 0, total: 0, count: 0 };
-            map[name][bucket] += Number(inv.open_balance || 0);
-            map[name].total += Number(inv.open_balance || 0);
-            map[name].count += 1;
+            (map[name] = map[name] || []).push(inv);
         });
-        return Object.values(map).sort((a, b) => b.b76 - a.b76 || b.total - a.total);
+        return map;
     }, [invoices]);
+    const byCustomer = useMemo(() => {
+        return Object.entries(grouped).map(([name, list]) => {
+            const agg = { name, b0: 0, b46: 0, b76: 0, total: 0, count: list.length };
+            list.forEach(inv => {
+                const bucket = bucketFor(computeAge(inv.invoice_date));
+                const balance = Number(inv.open_balance || 0);
+                agg[bucket] += balance;
+                agg.total += balance;
+            });
+            return agg;
+        }).sort((a, b) => b.b76 - a.b76 || b.total - a.total);
+    }, [grouped]);
     const grandTotals = useMemo(() => {
-        const t = { b0: 0, b46: 0, b76: 0, total: 0, count: invoices.length };
+        const t = { b0: 0, b46: 0, b76: 0, total: 0 };
         invoices.forEach(inv => {
             const bucket = bucketFor(computeAge(inv.invoice_date));
-            t[bucket] += Number(inv.open_balance || 0);
-            t.total += Number(inv.open_balance || 0);
+            const balance = Number(inv.open_balance || 0);
+            t[bucket] += balance;
+            t.total += balance;
         });
         return t;
     }, [invoices]);
@@ -547,16 +655,18 @@ function AgingSummary({ invoices, onSelectCustomer }) {
         return (React.createElement("div", { className: "text-center text-slate-500 py-20 glass rounded-xl" }, "No invoices yet \u2014 upload this week's aged AR to see the summary."));
     }
     return (React.createElement("div", null,
-        React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6" }, ["b0", "b46", "b76"].map(key => {
+        React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" }, ["b0", "b46", "b76"].map(key => {
             const meta = BUCKET_META[key];
             return (React.createElement("div", { key: key, className: "glass rounded-xl p-4", style: { borderColor: meta.color + "55" } },
-                React.createElement("div", { className: "flex items-center justify-between" },
-                    React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide " + meta.chip }, meta.label)),
+                React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide " + meta.chip }, meta.label),
                 React.createElement("div", { className: "text-2xl font-extrabold mt-2", style: { color: meta.color } }, fmtMoney(grandTotals[key])),
                 React.createElement("div", { className: "text-xs text-slate-500 mt-0.5" },
                     grandTotals.total > 0 ? Math.round((grandTotals[key] / grandTotals.total) * 100) : 0,
                     "% of total A/R")));
         })),
+        React.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" },
+            React.createElement(AgingBandChart, { grandTotals: grandTotals }),
+            React.createElement(TopCustomersChart, { byCustomer: byCustomer, grandTotal: grandTotals.total })),
         React.createElement("div", { className: "glass rounded-xl overflow-hidden" },
             React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-2.5 text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-700/60" },
                 React.createElement("div", { className: "col-span-4" }, "Customer"),
@@ -564,7 +674,7 @@ function AgingSummary({ invoices, onSelectCustomer }) {
                 React.createElement("div", { className: "col-span-2 text-right" }, "46\u201375"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "76+"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "Total")),
-            byCustomer.map(c => (React.createElement("div", { key: c.name, className: "grid grid-cols-12 gap-2 px-4 py-2.5 items-center hover:bg-slate-800/40 cursor-pointer border-b border-slate-800/60 last:border-b-0", onClick: () => onSelectCustomer(c.name) },
+            byCustomer.map(c => (React.createElement("div", { key: c.name, className: "grid grid-cols-12 gap-2 px-4 py-2.5 items-center hover:bg-slate-800/40 cursor-pointer border-b border-slate-800/60 last:border-b-0", onClick: () => onViewCustomerNotes(c.name, grouped[c.name]) },
                 React.createElement("div", { className: "col-span-4 font-semibold text-slate-200 truncate" },
                     c.name,
                     React.createElement("span", { className: "text-xs text-slate-500 font-normal ml-2" },
@@ -589,10 +699,14 @@ function Dashboard({ profile, onSignOut }) {
     const [sortMode, setSortMode] = useState("age_desc");
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState("invoices"); // 'invoices' | 'summary'
+    const [notesModal, setNotesModal] = useState(null); // { customerName, invoices } | null
     const canEdit = profile.role === 'editor';
     function jumpToCustomer(name) {
         setSearch(name);
         setView("invoices");
+    }
+    function viewCustomerNotes(name, list) {
+        setNotesModal({ customerName: name, invoices: list });
     }
     const loadInvoices = useCallback(async () => {
         const { data, error } = await db
@@ -728,7 +842,7 @@ function Dashboard({ profile, onSignOut }) {
             React.createElement("div", { className: "flex gap-2 mb-4" },
                 React.createElement("button", { className: "btn " + (view === "invoices" ? "btn-primary" : "btn-ghost"), onClick: () => setView("invoices") }, "Invoices"),
                 React.createElement("button", { className: "btn " + (view === "summary" ? "btn-primary" : "btn-ghost"), onClick: () => setView("summary") }, "Aging Summary")),
-            view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-slate-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onSelectCustomer: jumpToCustomer }))) : (React.createElement(React.Fragment, null,
+            view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-slate-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes }))) : (React.createElement(React.Fragment, null,
                 React.createElement("div", { className: "flex flex-wrap items-center gap-3 mb-4" },
                     React.createElement("input", { className: "input flex-1 min-w-[220px]", placeholder: "Search customer, invoice #, or PO\u2026", value: search, onChange: e => setSearch(e.target.value) }),
                     React.createElement("select", { className: "input", value: sortMode, onChange: e => setSortMode(e.target.value) },
@@ -737,8 +851,9 @@ function Dashboard({ profile, onSignOut }) {
                         React.createElement("option", { value: "alpha" }, "Sort: Customer A\u2013Z"))),
                 loading ? (React.createElement("div", { className: "text-center text-slate-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-slate-500 py-20 glass rounded-xl" },
                     "No invoices yet. ",
-                    canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list], idx) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, defaultOpen: idx < 5, onBulkAddNote: addNoteBulk, profile: profile }))))))),
-        selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote }))));
+                    canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list], idx) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, defaultOpen: idx < 5, onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes }))))))),
+        selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote })),
+        notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); } }))));
 }
 /* ============================================================
    ROOT APP
