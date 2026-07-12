@@ -14,59 +14,86 @@
 
 <style>
   :root{
-    --neon-cyan: #22e5ff;
-    --neon-pink: #ff2fb0;
-    --neon-amber: #ffb020;
-    --neon-green: #26ffb0;
-    --bg-0: #0a0e17;
-    --bg-1: #0f1420;
-    --bg-2: #151b2b;
-    --bg-3: #1c2438;
-    --border-1: #2a3352;
+    --neon-cyan: #3f6e6b;    /* dusty teal — primary accent */
+    --neon-pink: #a8503a;    /* terracotta — alerts / 76+ */
+    --neon-amber: #a8791f;   /* honey/ochre — watch / 46-75 */
+    --neon-green: #4f7a45;   /* moss — safe / 0-45 */
+    --bg-0: #f6f1e4;
+    --bg-1: rgba(255,253,247,0.82);
+    --bg-2: #efe9d8;
+    --bg-3: #e3dcc4;
+    --border-1: #d9cfad;
+    --ink: #3d3524;
   }
   html,body{ background: var(--bg-0); }
-  body{ font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  body{
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    position: relative;
+  }
+  /* Soft ambient nature blooms, slowly drifting — peaceful, faintly trippy */
+  body::before{
+    content:"";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 900px 700px at 12% 8%, rgba(191,214,175,0.55), transparent 60%),
+      radial-gradient(ellipse 800px 800px at 88% 15%, rgba(216,200,232,0.42), transparent 60%),
+      radial-gradient(ellipse 900px 700px at 80% 88%, rgba(240,206,164,0.48), transparent 60%),
+      radial-gradient(ellipse 700px 900px at 8% 92%, rgba(180,208,197,0.45), transparent 60%),
+      radial-gradient(ellipse 600px 600px at 50% 50%, rgba(233,214,190,0.3), transparent 65%),
+      linear-gradient(160deg, #faf6ec 0%, #f3efe0 45%, #ece7d6 100%);
+    background-repeat: no-repeat;
+    animation: driftBlooms 55s ease-in-out infinite alternate;
+  }
+  @keyframes driftBlooms{
+    0%{ background-position: 0% 0%, 100% 0%, 100% 100%, 0% 100%, 50% 50%, 0 0; }
+    100%{ background-position: 6% 6%, 93% 10%, 90% 92%, 6% 94%, 46% 54%, 0 0; }
+  }
   ::-webkit-scrollbar{ width:10px; height:10px; }
-  ::-webkit-scrollbar-track{ background: var(--bg-1); }
+  ::-webkit-scrollbar-track{ background: var(--bg-2); }
   ::-webkit-scrollbar-thumb{ background: var(--border-1); border-radius: 8px; }
   ::-webkit-scrollbar-thumb:hover{ background: var(--neon-cyan); }
 
   .glass{
-    background: linear-gradient(180deg, rgba(28,36,56,0.7), rgba(15,20,32,0.7));
+    background: linear-gradient(180deg, var(--bg-1), rgba(240,234,216,0.7));
     border: 1px solid var(--border-1);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(120,100,60,0.08);
   }
   .neon-text{
     color: var(--neon-cyan);
-    text-shadow: 0 0 12px rgba(34,229,255,0.55);
+    text-shadow: 0 0 14px rgba(63,110,107,0.22);
   }
   .btn{
     display:inline-flex; align-items:center; gap:.5rem;
     padding: .5rem .9rem; border-radius: .6rem; font-weight: 600; font-size:.85rem;
     transition: all .15s ease; border:1px solid transparent; cursor:pointer;
   }
-  .btn-primary{ background: linear-gradient(135deg, var(--neon-cyan), #0891b2); color:#04141a; box-shadow: 0 0 18px rgba(34,229,255,.35); }
-  .btn-primary:hover{ box-shadow: 0 0 26px rgba(34,229,255,.6); transform: translateY(-1px); }
-  .btn-ghost{ background: var(--bg-3); color:#cbd5e1; border-color: var(--border-1); }
+  .btn-primary{ background: linear-gradient(135deg, var(--neon-cyan), #2f5350); color:#fbf8f0; box-shadow: 0 2px 14px rgba(63,110,107,.28); }
+  .btn-primary:hover{ box-shadow: 0 4px 20px rgba(63,110,107,.4); transform: translateY(-1px); }
+  .btn-ghost{ background: var(--bg-3); color: var(--ink); border-color: var(--border-1); }
   .btn-ghost:hover{ border-color: var(--neon-cyan); color: var(--neon-cyan); }
-  .btn-danger{ background: rgba(255,47,47,.12); color:#ff6b6b; border-color: rgba(255,47,47,.35); }
-  .btn-danger:hover{ background: rgba(255,47,47,.2); }
+  .btn-danger{ background: rgba(168,80,58,.1); color:#8a4029; border-color: rgba(168,80,58,.3); }
+  .btn-danger:hover{ background: rgba(168,80,58,.18); }
   .input{
-    background: var(--bg-2); border:1px solid var(--border-1); color:#e2e8f0;
+    background: var(--bg-2); border:1px solid var(--border-1); color: var(--ink);
     border-radius:.5rem; padding:.5rem .75rem; outline:none; font-size:.9rem;
   }
-  .input:focus{ border-color: var(--neon-cyan); box-shadow: 0 0 0 3px rgba(34,229,255,.15); }
+  .input:focus{ border-color: var(--neon-cyan); box-shadow: 0 0 0 3px rgba(63,110,107,.14); }
 
   @keyframes siren-sweep{
-    0%{ box-shadow: 0 0 0px 0px rgba(255,47,176,.0), inset 0 0 0px rgba(255,176,32,0); }
-    50%{ box-shadow: 0 0 40px 6px rgba(255,47,176,.45), inset 0 0 30px rgba(255,176,32,.12); }
-    100%{ box-shadow: 0 0 0px 0px rgba(255,47,176,.0), inset 0 0 0px rgba(255,176,32,0); }
+    0%{ box-shadow: 0 0 0px 0px rgba(168,80,58,0), inset 0 0 0px rgba(168,121,31,0); }
+    50%{ box-shadow: 0 0 30px 5px rgba(168,80,58,.3), inset 0 0 22px rgba(168,121,31,.1); }
+    100%{ box-shadow: 0 0 0px 0px rgba(168,80,58,0), inset 0 0 0px rgba(168,121,31,0); }
   }
-  .siren-border{ animation: siren-sweep 2.2s ease-in-out infinite; border: 1px solid rgba(255,47,176,.5); }
+  .siren-border{ animation: siren-sweep 2.6s ease-in-out infinite; border: 1px solid rgba(168,80,58,.4); }
 
   @keyframes text-flicker{
     0%,19%,21%,23%,25%,54%,56%,100%{ opacity:1; }
-    20%,24%,55%{ opacity:.55; }
+    20%,24%,55%{ opacity:.6; }
   }
   .flicker{ animation: text-flicker 3.4s linear infinite; }
 
@@ -81,9 +108,9 @@
   }
   .pop-in{ animation: pop-in .18s ease-out; }
 
-  .age-chip-safe{ background: rgba(38,255,176,.12); color: var(--neon-green); border:1px solid rgba(38,255,176,.35);}
-  .age-chip-watch{ background: rgba(255,176,32,.12); color: var(--neon-amber); border:1px solid rgba(255,176,32,.35);}
-  .age-chip-danger{ background: rgba(255,47,47,.14); color:#ff7a7a; border:1px solid rgba(255,47,47,.4);}
+  .age-chip-safe{ background: rgba(79,122,69,.14); color:#3f6236; border:1px solid rgba(79,122,69,.35);}
+  .age-chip-watch{ background: rgba(168,121,31,.14); color:#8a641c; border:1px solid rgba(168,121,31,.35);}
+  .age-chip-danger{ background: rgba(168,80,58,.14); color:#8a4029; border:1px solid rgba(168,80,58,.38);}
 
   .avatar{
     width:1.9rem; height:1.9rem; border-radius:9999px; display:flex; align-items:center; justify-content:center;
@@ -91,7 +118,7 @@
   }
 </style>
 </head>
-<body class="min-h-screen text-slate-200">
+<body class="min-h-screen text-stone-700">
 <div id="root"></div>
 
 <script>
@@ -145,7 +172,7 @@ function ageBucketClass(age) {
     return "age-chip-safe";
 }
 function initialsColor(initials) {
-    const palette = ["#22e5ff", "#ff2fb0", "#ffb020", "#26ffb0", "#a78bfa", "#f472b6"];
+    const palette = ["#8faa76", "#c98a6b", "#d4ac4a", "#6fa88f", "#b39dd0", "#e0a3a3"];
     let h = 0;
     for (const c of initials)
         h = (h * 31 + c.charCodeAt(0)) % palette.length;
@@ -165,17 +192,17 @@ const TEAM = [
     { id: "guest", display_name: "Guest", initials: "GU", role: "guest" },
 ];
 function LoginScreen({ onLoggedIn }) {
-    return (React.createElement("div", { className: "min-h-screen flex items-center justify-center px-4", style: { background: "radial-gradient(circle at 20% 10%, #12203a 0%, #0a0e17 55%)" } },
+    return (React.createElement("div", { className: "min-h-screen flex items-center justify-center px-4" },
         React.createElement("div", { className: "w-full max-w-sm glass rounded-2xl p-8 pop-in" },
             React.createElement("div", { className: "flex items-center gap-2 mb-1" },
-                React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(34,229,255,0.35)]" }),
+                React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(63,110,107,0.35)]" }),
                 React.createElement("h1", { className: "text-xl font-extrabold tracking-tight neon-text" }, "Basin Collections")),
-            React.createElement("p", { className: "text-slate-400 text-sm mb-6" }, "Who's working the aged receivables?"),
-            React.createElement("div", { className: "space-y-2" }, TEAM.map(person => (React.createElement("button", { key: person.id, className: "w-full flex items-center gap-3 glass rounded-xl p-3 hover:border-cyan-400 transition text-left", onClick: () => onLoggedIn(person) },
+            React.createElement("p", { className: "text-stone-500 text-sm mb-6" }, "Who's working the aged receivables?"),
+            React.createElement("div", { className: "space-y-2" }, TEAM.map(person => (React.createElement("button", { key: person.id, className: "w-full flex items-center gap-3 glass rounded-xl p-3 hover:border-emerald-400 transition text-left", onClick: () => onLoggedIn(person) },
                 React.createElement("div", { className: "avatar", style: { background: initialsColor(person.initials), color: "#04141a" } }, person.initials),
                 React.createElement("div", null,
-                    React.createElement("div", { className: "font-semibold text-slate-100" }, person.display_name),
-                    React.createElement("div", { className: "text-xs text-slate-500" }, person.role === 'editor' ? 'Can edit' : 'View only')))))))));
+                    React.createElement("div", { className: "font-semibold text-stone-700" }, person.display_name),
+                    React.createElement("div", { className: "text-xs text-stone-500" }, person.role === 'editor' ? 'Can edit' : 'View only')))))))));
 }
 /* ============================================================
    NOTES PANEL (slide-over)
@@ -196,14 +223,14 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
         setSaving(false);
     }
     return (React.createElement("div", { className: "fixed inset-0 z-40 flex justify-end" },
-        React.createElement("div", { className: "absolute inset-0 bg-black/60", onClick: onClose }),
-        React.createElement("div", { className: "relative w-full max-w-lg h-full glass border-l border-slate-700 p-6 overflow-y-auto pop-in" },
+        React.createElement("div", { className: "absolute inset-0 bg-stone-900/40", onClick: onClose }),
+        React.createElement("div", { className: "relative w-full max-w-lg h-full glass border-l border-stone-300 p-6 overflow-y-auto pop-in" },
             React.createElement("div", { className: "flex items-start justify-between mb-1" },
                 React.createElement("div", null,
-                    React.createElement("div", { className: "text-xs uppercase tracking-wide text-slate-400" }, (_a = invoice.customers) === null || _a === void 0 ? void 0 : _a.name),
-                    React.createElement("h2", { className: "text-lg font-bold text-white" }, invoice.document_number)),
+                    React.createElement("div", { className: "text-xs uppercase tracking-wide text-stone-500" }, (_a = invoice.customers) === null || _a === void 0 ? void 0 : _a.name),
+                    React.createElement("h2", { className: "text-lg font-bold text-stone-800" }, invoice.document_number)),
                 React.createElement("button", { onClick: onClose, className: "btn btn-ghost !px-2 !py-1" }, "\u2715")),
-            React.createElement("div", { className: "flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-400 mb-4" },
+            React.createElement("div", { className: "flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-500 mb-4" },
                 React.createElement("span", null,
                     "PO: ",
                     invoice.po_number || "—"),
@@ -213,21 +240,21 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
                 React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(computeAge(invoice.invoice_date)) },
                     computeAge(invoice.invoice_date),
                     " days"),
-                React.createElement("span", { className: "font-semibold text-white" }, fmtMoney(invoice.open_balance))),
-            React.createElement("div", { className: "text-xs uppercase tracking-wide text-slate-400 mb-2" }, "Collections Notes"),
+                React.createElement("span", { className: "font-semibold text-stone-800" }, fmtMoney(invoice.open_balance))),
+            React.createElement("div", { className: "text-xs uppercase tracking-wide text-stone-500 mb-2" }, "Collections Notes"),
             React.createElement("div", { ref: listRef, className: "space-y-2 mb-4 max-h-[45vh] overflow-y-auto pr-1" },
-                notes.length === 0 && (React.createElement("div", { className: "text-sm text-slate-500 italic py-6 text-center border border-dashed border-slate-700 rounded-lg" }, "No notes yet \u2014 first entry starts the trail.")),
+                notes.length === 0 && (React.createElement("div", { className: "text-sm text-stone-500 italic py-6 text-center border border-dashed border-stone-300 rounded-lg" }, "No notes yet \u2014 first entry starts the trail.")),
                 notes.map(n => (React.createElement("div", { key: n.id, className: "glass rounded-lg p-3 flex gap-3" },
                     React.createElement("div", { className: "avatar", style: { background: initialsColor(n.author_initials), color: "#04141a" } }, n.author_initials),
                     React.createElement("div", { className: "flex-1 min-w-0" },
                         React.createElement("div", { className: "flex items-baseline justify-between gap-2" },
-                            React.createElement("span", { className: "text-sm font-semibold text-slate-200" }, n.author_name),
-                            React.createElement("span", { className: "text-xs text-slate-500 flex-shrink-0" }, fmtDateTime(n.created_at))),
-                        React.createElement("p", { className: "text-sm text-slate-300 whitespace-pre-wrap break-words mt-0.5" }, n.body)))))),
+                            React.createElement("span", { className: "text-sm font-semibold text-stone-700" }, n.author_name),
+                            React.createElement("span", { className: "text-xs text-stone-500 flex-shrink-0" }, fmtDateTime(n.created_at))),
+                        React.createElement("p", { className: "text-sm text-stone-600 whitespace-pre-wrap break-words mt-0.5" }, n.body)))))),
             canEdit ? (React.createElement("div", { className: "glass rounded-lg p-3" },
                 React.createElement("textarea", { className: "input w-full resize-none", rows: 5, placeholder: `Add a note as ${profile.display_name}… (left a voicemail, promised payment by 7/18, etc.)`, value: draft, onChange: e => setDraft(e.target.value) }),
                 React.createElement("div", { className: "flex justify-end mt-2" },
-                    React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : "Add note")))) : (React.createElement("div", { className: "text-xs text-slate-500 italic text-center py-2" }, "Guest view \u2014 read only")))));
+                    React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : "Add note")))) : (React.createElement("div", { className: "text-xs text-stone-500 italic text-center py-2" }, "Guest view \u2014 read only")))));
 }
 /* ============================================================
    PRIORITY ALARM PANEL
@@ -236,19 +263,19 @@ function PriorityAlarm({ invoices, onOpen, onUnflag, canEdit }) {
     if (invoices.length === 0)
         return null;
     return (React.createElement("div", { className: "mb-8 rounded-2xl overflow-hidden siren-border" },
-        React.createElement("div", { className: "px-5 py-3 flex items-center gap-2", style: { background: "linear-gradient(90deg, rgba(255,47,176,.18), rgba(255,176,32,.14))" } },
+        React.createElement("div", { className: "px-5 py-3 flex items-center gap-2", style: { background: "linear-gradient(90deg, rgba(168,80,58,.16), rgba(168,121,31,.14))" } },
             React.createElement("span", { className: "text-xl" }, "\uD83D\uDEA8"),
             React.createElement("h2", { className: "font-extrabold tracking-wide text-sm uppercase flicker", style: { color: "var(--neon-pink)" } }, "This Week's Priorities"),
-            React.createElement("span", { className: "ml-1 text-xs px-2 py-0.5 rounded-full bg-black/30 text-slate-300" }, invoices.length)),
-        React.createElement("div", { className: "bg-black/20 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" }, invoices.map(inv => {
+            React.createElement("span", { className: "ml-1 text-xs px-2 py-0.5 rounded-full bg-stone-900/20 text-stone-600" }, invoices.length)),
+        React.createElement("div", { className: "bg-stone-900/10 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" }, invoices.map(inv => {
             var _a;
             const age = computeAge(inv.invoice_date);
-            return (React.createElement("div", { key: inv.id, className: "glass rounded-xl p-3 hover:border-pink-400 transition cursor-pointer group", onClick: () => onOpen(inv) },
+            return (React.createElement("div", { key: inv.id, className: "glass rounded-xl p-3 hover:border-red-400 transition cursor-pointer group", onClick: () => onOpen(inv) },
                 React.createElement("div", { className: "flex items-start justify-between gap-2" },
                     React.createElement("div", { className: "min-w-0" },
-                        React.createElement("div", { className: "text-xs text-slate-400 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
-                        React.createElement("div", { className: "font-bold text-white truncate" }, inv.document_number)),
-                    canEdit && (React.createElement("button", { className: "text-slate-500 hover:text-pink-400 text-xs flex-shrink-0", title: "Remove from priorities", onClick: (e) => { e.stopPropagation(); onUnflag(inv); } }, "\u2715"))),
+                        React.createElement("div", { className: "text-xs text-stone-500 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
+                        React.createElement("div", { className: "font-bold text-stone-800 truncate" }, inv.document_number)),
+                    canEdit && (React.createElement("button", { className: "text-stone-500 hover:text-red-600 text-xs flex-shrink-0", title: "Remove from priorities", onClick: (e) => { e.stopPropagation(); onUnflag(inv); } }, "\u2715"))),
                 React.createElement("div", { className: "flex items-center justify-between mt-2" },
                     React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(age) },
                         age,
@@ -387,30 +414,30 @@ function UploadButton({ profile, onDone }) {
     return (React.createElement("div", { className: "relative" },
         React.createElement("input", { ref: fileRef, type: "file", accept: ".xlsx,.xls", className: "hidden", onChange: handleFile }),
         React.createElement("button", { className: "btn btn-primary", disabled: busy, onClick: () => fileRef.current.click() }, busy ? "Syncing…" : "⬆ Upload Weekly Aged AR"),
-        msg && (React.createElement("div", { className: "absolute right-0 mt-2 w-72 text-xs rounded-lg p-3 z-10 " + (msg.ok ? "bg-emerald-950 text-emerald-300 border border-emerald-700" : "bg-red-950 text-red-300 border border-red-700") },
+        msg && (React.createElement("div", { className: "absolute right-0 mt-2 w-72 text-xs rounded-lg p-3 z-10 " + (msg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-300" : "bg-red-50 text-red-700 border border-red-300") },
             msg.text,
-            React.createElement("button", { className: "block mt-1 text-slate-400 underline", onClick: () => setMsg(null) }, "dismiss")))));
+            React.createElement("button", { className: "block mt-1 text-stone-500 underline", onClick: () => setMsg(null) }, "dismiss")))));
 }
 /* ============================================================
    CUSTOMER GROUP + INVOICE ROW
    ============================================================ */
 function InvoiceRow({ inv, canEdit, onOpenNotes, onTogglePriority, noteCount, selectMode, selected, onToggleSelect }) {
     const age = computeAge(inv.invoice_date);
-    return (React.createElement("div", { className: "grid grid-cols-12 gap-2 items-center px-4 py-2.5 hover:bg-slate-800/40 rounded-lg cursor-pointer group", onClick: () => selectMode ? onToggleSelect(inv.id) : onOpenNotes(inv) },
-        React.createElement("div", { className: "col-span-3 font-mono text-sm text-slate-200 flex items-center gap-2" },
-            selectMode && (React.createElement("input", { type: "checkbox", checked: selected, onChange: () => onToggleSelect(inv.id), onClick: (e) => e.stopPropagation(), className: "w-4 h-4 accent-cyan-400 flex-shrink-0" })),
+    return (React.createElement("div", { className: "grid grid-cols-12 gap-2 items-center px-4 py-2.5 hover:bg-stone-200/50 rounded-lg cursor-pointer group", onClick: () => selectMode ? onToggleSelect(inv.id) : onOpenNotes(inv) },
+        React.createElement("div", { className: "col-span-3 font-mono text-sm text-stone-700 flex items-center gap-2" },
+            selectMode && (React.createElement("input", { type: "checkbox", checked: selected, onChange: () => onToggleSelect(inv.id), onClick: (e) => e.stopPropagation(), className: "w-4 h-4 accent-emerald-500 flex-shrink-0" })),
             inv.document_number,
-            noteCount > 0 && (React.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-900/50 text-cyan-300 border border-cyan-700" },
+            noteCount > 0 && (React.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300" },
                 noteCount,
                 " note",
                 noteCount > 1 ? "s" : ""))),
-        React.createElement("div", { className: "col-span-2 text-xs text-slate-400 truncate" }, inv.po_number || "—"),
-        React.createElement("div", { className: "col-span-2 text-xs text-slate-400" }, fmtDate(inv.invoice_date)),
+        React.createElement("div", { className: "col-span-2 text-xs text-stone-500 truncate" }, inv.po_number || "—"),
+        React.createElement("div", { className: "col-span-2 text-xs text-stone-500" }, fmtDate(inv.invoice_date)),
         React.createElement("div", { className: "col-span-1" },
             React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(age) },
                 age,
                 "d")),
-        React.createElement("div", { className: "col-span-2 text-right font-semibold text-slate-100" }, fmtMoney(inv.open_balance)),
+        React.createElement("div", { className: "col-span-2 text-right font-semibold text-stone-700" }, fmtMoney(inv.open_balance)),
         React.createElement("div", { className: "col-span-2 flex justify-end" }, canEdit && !selectMode && (React.createElement("button", { title: inv.is_priority ? "Remove from weekly priorities" : "Mark as weekly priority", className: "text-lg " + (inv.is_priority ? "" : "opacity-30 group-hover:opacity-70"), onClick: (e) => { e.stopPropagation(); onTogglePriority(inv); } }, inv.is_priority ? "🚨" : "🔕")))));
 }
 function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit }) {
@@ -425,14 +452,14 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
         onClose();
     }
     return (React.createElement("div", { className: "fixed inset-0 z-40 flex items-center justify-center px-4" },
-        React.createElement("div", { className: "absolute inset-0 bg-black/60", onClick: onClose }),
+        React.createElement("div", { className: "absolute inset-0 bg-stone-900/40", onClick: onClose }),
         React.createElement("div", { className: "relative w-full max-w-md glass rounded-2xl p-6 pop-in" },
-            React.createElement("h2", { className: "text-lg font-bold text-white mb-1" },
+            React.createElement("h2", { className: "text-lg font-bold text-stone-800 mb-1" },
                 "Add note to ",
                 invoiceIds.length,
                 " invoice",
                 invoiceIds.length > 1 ? "s" : ""),
-            React.createElement("p", { className: "text-sm text-slate-400 mb-4" },
+            React.createElement("p", { className: "text-sm text-stone-500 mb-4" },
                 customerName,
                 " \u2014 this note will be added to every selected invoice."),
             React.createElement("textarea", { className: "input w-full resize-none", rows: 5, autoFocus: true, placeholder: `Add a note as ${profile.display_name}…`, value: draft, onChange: e => setDraft(e.target.value) }),
@@ -440,8 +467,7 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
                 React.createElement("button", { className: "btn btn-ghost", onClick: onClose }, "Cancel"),
                 React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : `Add to ${invoiceIds.length} invoice${invoiceIds.length > 1 ? "s" : ""}`)))));
 }
-function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, defaultOpen, onBulkAddNote, profile, onViewCustomerNotes }) {
-    const [open, setOpen] = useState(defaultOpen);
+function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, isOpen, onToggleOpen, onBulkAddNote, profile, onViewCustomerNotes }) {
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
     const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -466,11 +492,11 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
         exitSelectMode();
     }
     return (React.createElement("div", { className: "glass rounded-xl mb-3 overflow-hidden" },
-        React.createElement("div", { className: "w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800/40 cursor-pointer", onClick: () => setOpen(o => !o) },
+        React.createElement("div", { className: "w-full flex items-center justify-between px-4 py-3 hover:bg-stone-200/50 cursor-pointer", onClick: onToggleOpen },
             React.createElement("div", { className: "flex items-center gap-3" },
-                React.createElement("span", { className: "text-slate-500 text-xs" }, open ? "▾" : "▸"),
-                React.createElement("span", { className: "font-bold text-white" }, name),
-                React.createElement("span", { className: "text-xs text-slate-500" },
+                React.createElement("span", { className: "text-stone-500 text-xs" }, isOpen ? "▾" : "▸"),
+                React.createElement("span", { className: "font-bold text-stone-800" }, name),
+                React.createElement("span", { className: "text-xs text-stone-500" },
                     invoices.length,
                     " invoice",
                     invoices.length > 1 ? "s" : ""),
@@ -479,9 +505,9 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
                 React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); onViewCustomerNotes(name, invoices); } }, "\uD83D\uDCCB Notes"),
                 canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); selectMode ? exitSelectMode() : setSelectMode(true); } }, selectMode ? "Cancel" : "Select")),
                 React.createElement("span", { className: "font-bold", style: { color: "var(--neon-cyan)" } }, fmtMoney(total)))),
-        open && (React.createElement("div", { className: "border-t border-slate-700/60 pb-1" },
-            selectMode && (React.createElement("div", { className: "flex items-center justify-between px-4 py-2 bg-cyan-950/30 border-b border-cyan-900/50" },
-                React.createElement("span", { className: "text-xs text-cyan-300" },
+        isOpen && (React.createElement("div", { className: "border-t border-stone-300/60 pb-1" },
+            selectMode && (React.createElement("div", { className: "flex items-center justify-between px-4 py-2 bg-emerald-50 border-b border-emerald-200" },
+                React.createElement("span", { className: "text-xs text-emerald-700" },
                     selected.size,
                     " selected"),
                 React.createElement("div", { className: "flex gap-2" },
@@ -490,7 +516,7 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
                         "\uD83D\uDCDD Note selected (",
                         selected.size,
                         ")")))),
-            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-1.5 text-[10px] uppercase tracking-wide text-slate-500" },
+            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-1.5 text-[10px] uppercase tracking-wide text-stone-500" },
                 React.createElement("div", { className: "col-span-3" }, "Invoice #"),
                 React.createElement("div", { className: "col-span-2" }, "PO"),
                 React.createElement("div", { className: "col-span-2" }, "Invoice Date"),
@@ -519,22 +545,22 @@ const BUCKET_META = {
     b46: { label: "46–75 Days", color: "var(--neon-amber)", chip: "age-chip-watch" },
     b76: { label: "76+ Days", color: "var(--neon-pink)", chip: "age-chip-danger" },
 };
-const CUSTOMER_PALETTE = ["#22e5ff", "#ff2fb0", "#ffb020", "#26ffb0", "#a78bfa"];
+const CUSTOMER_PALETTE = ["#3f6e6b", "#a8503a", "#a8791f", "#4f7a45", "#8a6fa8"];
 function HorizontalBarRow({ label, value, share, color }) {
     return (React.createElement("div", { className: "mb-3 last:mb-0" },
         React.createElement("div", { className: "flex items-center justify-between text-xs mb-1 gap-2" },
-            React.createElement("span", { className: "text-slate-300 font-medium truncate" }, label),
-            React.createElement("span", { className: "text-slate-400 flex-shrink-0" },
+            React.createElement("span", { className: "text-stone-600 font-medium truncate" }, label),
+            React.createElement("span", { className: "text-stone-500 flex-shrink-0" },
                 fmtMoney(value),
                 " \u00B7 ",
                 Math.round(share),
                 "%")),
-        React.createElement("div", { className: "w-full h-3 rounded-full bg-slate-800/80 overflow-hidden" },
+        React.createElement("div", { className: "w-full h-3 rounded-full bg-stone-200/80 overflow-hidden" },
             React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
 }
 function AgingBandChart({ grandTotals }) {
     return (React.createElement("div", { className: "glass rounded-xl p-4" },
-        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-slate-500 mb-3" }, "Total A/R by Aging Band"),
+        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-3" }, "Total A/R by Aging Band"),
         ["b0", "b46", "b76"].map(key => {
             const meta = BUCKET_META[key];
             const share = grandTotals.total > 0 ? (grandTotals[key] / grandTotals.total * 100) : 0;
@@ -547,12 +573,12 @@ function TopCustomersChart({ byCustomer, grandTotal }) {
     const rest = sorted.slice(5);
     const restTotal = rest.reduce((s, c) => s + c.total, 0);
     return (React.createElement("div", { className: "glass rounded-xl p-4" },
-        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-slate-500 mb-3" }, "Total A/R \u2014 Top 5 Customers vs. All Others"),
+        React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-3" }, "Total A/R \u2014 Top 5 Customers vs. All Others"),
         top5.map((c, i) => {
             const share = grandTotal > 0 ? (c.total / grandTotal * 100) : 0;
             return React.createElement(HorizontalBarRow, { key: c.name, label: c.name, value: c.total, share: share, color: CUSTOMER_PALETTE[i % CUSTOMER_PALETTE.length] });
         }),
-        rest.length > 0 && (React.createElement(HorizontalBarRow, { label: "All Others (" + rest.length + ")", value: restTotal, share: grandTotal > 0 ? (restTotal / grandTotal * 100) : 0, color: "#475569" }))));
+        rest.length > 0 && (React.createElement(HorizontalBarRow, { label: "All Others (" + rest.length + ")", value: restTotal, share: grandTotal > 0 ? (restTotal / grandTotal * 100) : 0, color: "#8a8168" }))));
 }
 /* ============================================================
    CUSTOMER NOTES MODAL — every note, grouped by invoice, for
@@ -587,12 +613,12 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices })
     const sortedInvoices = useMemo(() => [...invoices].sort((a, b) => computeAge(b.invoice_date) - computeAge(a.invoice_date)), [invoices]);
     const totalBalance = invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0);
     return (React.createElement("div", { className: "fixed inset-0 z-50 flex items-center justify-center px-4" },
-        React.createElement("div", { className: "absolute inset-0 bg-black/70", onClick: onClose }),
+        React.createElement("div", { className: "absolute inset-0 bg-stone-900/50", onClick: onClose }),
         React.createElement("div", { className: "relative w-full max-w-2xl max-h-[85vh] glass rounded-2xl p-6 overflow-y-auto pop-in" },
             React.createElement("div", { className: "flex items-start justify-between mb-1 gap-3" },
                 React.createElement("div", null,
-                    React.createElement("h2", { className: "text-lg font-bold text-white" }, customerName),
-                    React.createElement("p", { className: "text-xs text-slate-500" },
+                    React.createElement("h2", { className: "text-lg font-bold text-stone-800" }, customerName),
+                    React.createElement("p", { className: "text-xs text-stone-500" },
                         invoices.length,
                         " invoice",
                         invoices.length > 1 ? "s" : "",
@@ -601,22 +627,22 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices })
                         " total open")),
                 React.createElement("button", { onClick: onClose, className: "btn btn-ghost !px-2 !py-1 flex-shrink-0" }, "\u2715")),
             onGoToInvoices && (React.createElement("button", { className: "btn btn-ghost !text-xs mt-2 mb-4", onClick: onGoToInvoices }, "View in Invoices tab \u2192")),
-            loadingNotes ? (React.createElement("div", { className: "text-center text-slate-500 py-10" }, "Loading notes\u2026")) : (React.createElement("div", { className: "space-y-3 mt-2" }, sortedInvoices.map(inv => {
+            loadingNotes ? (React.createElement("div", { className: "text-center text-stone-500 py-10" }, "Loading notes\u2026")) : (React.createElement("div", { className: "space-y-3 mt-2" }, sortedInvoices.map(inv => {
                 const notes = notesByInvoice[inv.id] || [];
                 const age = computeAge(inv.invoice_date);
-                return (React.createElement("div", { key: inv.id, className: "border border-slate-700/60 rounded-xl p-3" },
+                return (React.createElement("div", { key: inv.id, className: "border border-stone-300/60 rounded-xl p-3" },
                     React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 mb-2" },
-                        React.createElement("div", { className: "font-mono text-sm text-slate-200" }, inv.document_number),
+                        React.createElement("div", { className: "font-mono text-sm text-stone-700" }, inv.document_number),
                         React.createElement("div", { className: "flex items-center gap-2" },
                             React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(age) },
                                 age,
                                 "d"),
-                            React.createElement("span", { className: "text-sm font-semibold text-slate-100" }, fmtMoney(inv.open_balance)))),
-                    notes.length === 0 ? (React.createElement("div", { className: "text-xs text-slate-500 italic" }, "No notes yet")) : (React.createElement("div", { className: "space-y-1.5" }, notes.map(n => (React.createElement("div", { key: n.id, className: "flex gap-2 text-sm" },
+                            React.createElement("span", { className: "text-sm font-semibold text-stone-700" }, fmtMoney(inv.open_balance)))),
+                    notes.length === 0 ? (React.createElement("div", { className: "text-xs text-stone-500 italic" }, "No notes yet")) : (React.createElement("div", { className: "space-y-1.5" }, notes.map(n => (React.createElement("div", { key: n.id, className: "flex gap-2 text-sm" },
                         React.createElement("div", { className: "avatar flex-shrink-0", style: { width: "1.5rem", height: "1.5rem", fontSize: ".6rem", background: initialsColor(n.author_initials), color: "#04141a" } }, n.author_initials),
                         React.createElement("div", { className: "min-w-0" },
-                            React.createElement("span", { className: "text-slate-500 text-xs mr-2" }, fmtDateTime(n.created_at)),
-                            React.createElement("span", { className: "text-slate-300 break-words" }, n.body)))))))));
+                            React.createElement("span", { className: "text-stone-500 text-xs mr-2" }, fmtDateTime(n.created_at)),
+                            React.createElement("span", { className: "text-stone-600 break-words" }, n.body)))))))));
             }))))));
 }
 function AgingSummary({ invoices, onViewCustomerNotes }) {
@@ -652,7 +678,7 @@ function AgingSummary({ invoices, onViewCustomerNotes }) {
         return t;
     }, [invoices]);
     if (invoices.length === 0) {
-        return (React.createElement("div", { className: "text-center text-slate-500 py-20 glass rounded-xl" }, "No invoices yet \u2014 upload this week's aged AR to see the summary."));
+        return (React.createElement("div", { className: "text-center text-stone-500 py-20 glass rounded-xl" }, "No invoices yet \u2014 upload this week's aged AR to see the summary."));
     }
     return (React.createElement("div", null,
         React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" }, ["b0", "b46", "b76"].map(key => {
@@ -660,7 +686,7 @@ function AgingSummary({ invoices, onViewCustomerNotes }) {
             return (React.createElement("div", { key: key, className: "glass rounded-xl p-4", style: { borderColor: meta.color + "55" } },
                 React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide " + meta.chip }, meta.label),
                 React.createElement("div", { className: "text-2xl font-extrabold mt-2", style: { color: meta.color } }, fmtMoney(grandTotals[key])),
-                React.createElement("div", { className: "text-xs text-slate-500 mt-0.5" },
+                React.createElement("div", { className: "text-xs text-stone-500 mt-0.5" },
                     grandTotals.total > 0 ? Math.round((grandTotals[key] / grandTotals.total) * 100) : 0,
                     "% of total A/R")));
         })),
@@ -668,28 +694,28 @@ function AgingSummary({ invoices, onViewCustomerNotes }) {
             React.createElement(AgingBandChart, { grandTotals: grandTotals }),
             React.createElement(TopCustomersChart, { byCustomer: byCustomer, grandTotal: grandTotals.total })),
         React.createElement("div", { className: "glass rounded-xl overflow-hidden" },
-            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-2.5 text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-700/60" },
+            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-2.5 text-[10px] uppercase tracking-wide text-stone-500 border-b border-stone-300/60" },
                 React.createElement("div", { className: "col-span-4" }, "Customer"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "0\u201345"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "46\u201375"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "76+"),
                 React.createElement("div", { className: "col-span-2 text-right" }, "Total")),
-            byCustomer.map(c => (React.createElement("div", { key: c.name, className: "grid grid-cols-12 gap-2 px-4 py-2.5 items-center hover:bg-slate-800/40 cursor-pointer border-b border-slate-800/60 last:border-b-0", onClick: () => onViewCustomerNotes(c.name, grouped[c.name]) },
-                React.createElement("div", { className: "col-span-4 font-semibold text-slate-200 truncate" },
+            byCustomer.map(c => (React.createElement("div", { key: c.name, className: "grid grid-cols-12 gap-2 px-4 py-2.5 items-center hover:bg-stone-200/50 cursor-pointer border-b border-stone-200/60 last:border-b-0", onClick: () => onViewCustomerNotes(c.name, grouped[c.name]) },
+                React.createElement("div", { className: "col-span-4 font-semibold text-stone-700 truncate" },
                     c.name,
-                    React.createElement("span", { className: "text-xs text-slate-500 font-normal ml-2" },
+                    React.createElement("span", { className: "text-xs text-stone-500 font-normal ml-2" },
                         c.count,
                         " inv.")),
-                React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b0 ? BUCKET_META.b0.color : "#64748b" } }, c.b0 ? fmtMoney(c.b0) : "—"),
-                React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b46 ? BUCKET_META.b46.color : "#64748b" } }, c.b46 ? fmtMoney(c.b46) : "—"),
-                React.createElement("div", { className: "col-span-2 text-right text-sm font-semibold", style: { color: c.b76 ? BUCKET_META.b76.color : "#64748b" } }, c.b76 ? fmtMoney(c.b76) : "—"),
-                React.createElement("div", { className: "col-span-2 text-right font-bold text-slate-100" }, fmtMoney(c.total))))),
-            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-3 items-center bg-black/30 border-t border-slate-700" },
-                React.createElement("div", { className: "col-span-4 font-extrabold text-white" }, "Grand Total"),
+                React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b0 ? BUCKET_META.b0.color : "#a89d84" } }, c.b0 ? fmtMoney(c.b0) : "—"),
+                React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b46 ? BUCKET_META.b46.color : "#a89d84" } }, c.b46 ? fmtMoney(c.b46) : "—"),
+                React.createElement("div", { className: "col-span-2 text-right text-sm font-semibold", style: { color: c.b76 ? BUCKET_META.b76.color : "#a89d84" } }, c.b76 ? fmtMoney(c.b76) : "—"),
+                React.createElement("div", { className: "col-span-2 text-right font-bold text-stone-700" }, fmtMoney(c.total))))),
+            React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-3 items-center bg-stone-900/20 border-t border-stone-300" },
+                React.createElement("div", { className: "col-span-4 font-extrabold text-stone-800" }, "Grand Total"),
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b0.color } }, fmtMoney(grandTotals.b0)),
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b46.color } }, fmtMoney(grandTotals.b46)),
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b76.color } }, fmtMoney(grandTotals.b76)),
-                React.createElement("div", { className: "col-span-2 text-right font-extrabold text-white" }, fmtMoney(grandTotals.total))))));
+                React.createElement("div", { className: "col-span-2 text-right font-extrabold text-stone-800" }, fmtMoney(grandTotals.total))))));
 }
 function Dashboard({ profile, onSignOut }) {
     const [invoices, setInvoices] = useState([]);
@@ -700,10 +726,24 @@ function Dashboard({ profile, onSignOut }) {
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState("invoices"); // 'invoices' | 'summary'
     const [notesModal, setNotesModal] = useState(null); // { customerName, invoices } | null
+    const [customerFilter, setCustomerFilter] = useState(""); // "" = all customers
+    const [openCustomers, setOpenCustomers] = useState(() => new Set()); // collapsed by default
     const canEdit = profile.role === 'editor';
     function jumpToCustomer(name) {
-        setSearch(name);
+        setCustomerFilter(name);
+        setSearch("");
+        setOpenCustomers(prev => new Set(prev).add(name));
         setView("invoices");
+    }
+    function toggleCustomerOpen(name) {
+        setOpenCustomers(prev => {
+            const next = new Set(prev);
+            if (next.has(name))
+                next.delete(name);
+            else
+                next.add(name);
+            return next;
+        });
     }
     function viewCustomerNotes(name, list) {
         setNotesModal({ customerName: name, invoices: list });
@@ -771,17 +811,23 @@ function Dashboard({ profile, onSignOut }) {
             priority_set_at: !inv.is_priority ? new Date().toISOString() : null,
         }).eq('id', inv.id);
     }
+    const customerNames = useMemo(() => [...new Set(invoices.map(i => { var _a; return ((_a = i.customers) === null || _a === void 0 ? void 0 : _a.name) || "Unknown"; }))].sort((a, b) => a.localeCompare(b)), [invoices]);
     const filtered = useMemo(() => {
+        let list = invoices;
+        if (customerFilter) {
+            list = list.filter(i => { var _a; return (((_a = i.customers) === null || _a === void 0 ? void 0 : _a.name) || "Unknown") === customerFilter; });
+        }
         const q = search.trim().toLowerCase();
-        if (!q)
-            return invoices;
-        return invoices.filter(i => {
-            var _a;
-            return i.document_number.toLowerCase().includes(q) ||
-                (((_a = i.customers) === null || _a === void 0 ? void 0 : _a.name) || "").toLowerCase().includes(q) ||
-                (i.po_number || "").toLowerCase().includes(q);
-        });
-    }, [invoices, search]);
+        if (q) {
+            list = list.filter(i => {
+                var _a;
+                return i.document_number.toLowerCase().includes(q) ||
+                    (((_a = i.customers) === null || _a === void 0 ? void 0 : _a.name) || "").toLowerCase().includes(q) ||
+                    (i.po_number || "").toLowerCase().includes(q);
+            });
+        }
+        return list;
+    }, [invoices, search, customerFilter]);
     const grouped = useMemo(() => {
         const map = {};
         filtered.forEach(inv => {
@@ -807,34 +853,40 @@ function Dashboard({ profile, onSignOut }) {
     const overdueCount = useMemo(() => invoices.filter(i => computeAge(i.invoice_date) > 75).length, [invoices]);
     const overdueBalance = useMemo(() => invoices.filter(i => computeAge(i.invoice_date) > 75).reduce((s, i) => s + Number(i.open_balance || 0), 0), [invoices]);
     const counts = notesByInvoice.__counts || {};
+    function expandAll() {
+        setOpenCustomers(new Set(grouped.map(([name]) => name)));
+    }
+    function collapseAll() {
+        setOpenCustomers(new Set());
+    }
     return (React.createElement("div", { className: "min-h-screen pb-16" },
-        React.createElement("div", { className: "sticky top-0 z-30 glass border-b border-slate-800 px-5 py-3" },
+        React.createElement("div", { className: "sticky top-0 z-30 glass border-b border-stone-200 px-5 py-3" },
             React.createElement("div", { className: "max-w-6xl mx-auto flex items-center justify-between gap-4" },
                 React.createElement("div", { className: "flex items-center gap-2" },
-                    React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(34,229,255,0.35)]" }),
+                    React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(63,110,107,0.35)]" }),
                     React.createElement("div", null,
                         React.createElement("h1", { className: "font-extrabold neon-text leading-tight" }, "Basin Collections"),
-                        React.createElement("p", { className: "text-[11px] text-slate-500 -mt-0.5" }, "Aged Receivables Tracker"))),
+                        React.createElement("p", { className: "text-[11px] text-stone-500 -mt-0.5" }, "Aged Receivables Tracker"))),
                 React.createElement("div", { className: "flex items-center gap-3" },
                     canEdit && React.createElement(UploadButton, { profile: profile, onDone: loadInvoices }),
-                    React.createElement("div", { className: "flex items-center gap-2 pl-3 border-l border-slate-700" },
+                    React.createElement("div", { className: "flex items-center gap-2 pl-3 border-l border-stone-300" },
                         React.createElement("div", { className: "avatar", style: { background: initialsColor(profile.initials), color: "#04141a" } }, profile.initials),
                         React.createElement("div", { className: "text-xs" },
-                            React.createElement("div", { className: "font-semibold text-slate-200" }, profile.display_name),
-                            React.createElement("div", { className: "text-slate-500" }, canEdit ? "Editor" : "Guest · view only"))),
+                            React.createElement("div", { className: "font-semibold text-stone-700" }, profile.display_name),
+                            React.createElement("div", { className: "text-stone-500" }, canEdit ? "Editor" : "Guest · view only"))),
                     React.createElement("button", { className: "btn btn-ghost", onClick: onSignOut }, "Switch user")))),
         React.createElement("div", { className: "max-w-6xl mx-auto px-5 mt-6" },
             React.createElement("div", { className: "grid grid-cols-3 gap-3 mb-6" },
                 React.createElement("div", { className: "glass rounded-xl p-4" },
-                    React.createElement("div", { className: "text-xs text-slate-500 uppercase tracking-wide" }, "Total Open A/R"),
-                    React.createElement("div", { className: "text-2xl font-extrabold text-white mt-1" }, fmtMoney(totalBalance))),
+                    React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "Total Open A/R"),
+                    React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, fmtMoney(totalBalance))),
                 React.createElement("div", { className: "glass rounded-xl p-4" },
-                    React.createElement("div", { className: "text-xs text-slate-500 uppercase tracking-wide" }, "Invoices Tracked"),
-                    React.createElement("div", { className: "text-2xl font-extrabold text-white mt-1" }, invoices.length)),
+                    React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "Invoices Tracked"),
+                    React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, invoices.length)),
                 React.createElement("div", { className: "glass rounded-xl p-4" },
-                    React.createElement("div", { className: "text-xs text-slate-500 uppercase tracking-wide" }, "75+ Days Overdue"),
+                    React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "75+ Days Overdue"),
                     React.createElement("div", { className: "text-2xl font-extrabold mt-1", style: { color: "var(--neon-pink)" } }, fmtMoney(overdueBalance)),
-                    React.createElement("div", { className: "text-xs text-slate-500 mt-0.5" },
+                    React.createElement("div", { className: "text-xs text-stone-500 mt-0.5" },
                         overdueCount,
                         " invoice",
                         overdueCount === 1 ? "" : "s"))),
@@ -842,16 +894,23 @@ function Dashboard({ profile, onSignOut }) {
             React.createElement("div", { className: "flex gap-2 mb-4" },
                 React.createElement("button", { className: "btn " + (view === "invoices" ? "btn-primary" : "btn-ghost"), onClick: () => setView("invoices") }, "Invoices"),
                 React.createElement("button", { className: "btn " + (view === "summary" ? "btn-primary" : "btn-ghost"), onClick: () => setView("summary") }, "Aging Summary")),
-            view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-slate-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes }))) : (React.createElement(React.Fragment, null,
+            view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes }))) : (React.createElement(React.Fragment, null,
                 React.createElement("div", { className: "flex flex-wrap items-center gap-3 mb-4" },
                     React.createElement("input", { className: "input flex-1 min-w-[220px]", placeholder: "Search customer, invoice #, or PO\u2026", value: search, onChange: e => setSearch(e.target.value) }),
+                    React.createElement("select", { className: "input", value: customerFilter, onChange: e => setCustomerFilter(e.target.value) },
+                        React.createElement("option", { value: "" }, "All customers"),
+                        customerNames.map(n => React.createElement("option", { key: n, value: n }, n))),
                     React.createElement("select", { className: "input", value: sortMode, onChange: e => setSortMode(e.target.value) },
                         React.createElement("option", { value: "age_desc" }, "Sort: Most overdue first"),
                         React.createElement("option", { value: "balance_desc" }, "Sort: Highest balance first"),
-                        React.createElement("option", { value: "alpha" }, "Sort: Customer A\u2013Z"))),
-                loading ? (React.createElement("div", { className: "text-center text-slate-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-slate-500 py-20 glass rounded-xl" },
+                        React.createElement("option", { value: "alpha" }, "Sort: Customer A\u2013Z")),
+                    React.createElement("div", { className: "flex gap-2" },
+                        React.createElement("button", { className: "btn btn-ghost", onClick: expandAll }, "Expand All"),
+                        React.createElement("button", { className: "btn btn-ghost", onClick: collapseAll }, "Collapse All")),
+                    customerFilter && (React.createElement("button", { className: "btn btn-ghost", onClick: () => setCustomerFilter("") }, "Show All Customers \u2715"))),
+                loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-20 glass rounded-xl" },
                     "No invoices yet. ",
-                    canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list], idx) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, defaultOpen: idx < 5, onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes }))))))),
+                    canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes }))))))),
         selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote })),
         notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); } }))));
 }
