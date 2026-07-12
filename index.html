@@ -24,6 +24,7 @@
     --bg-3: #e3dcc4;
     --border-1: #d9cfad;
     --ink: #3d3524;
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
   }
   html,body{ background: var(--bg-0); }
   body{
@@ -58,10 +59,28 @@
   ::-webkit-scrollbar-thumb:hover{ background: var(--neon-cyan); }
 
   .glass{
-    background: linear-gradient(180deg, var(--bg-1), rgba(240,234,216,0.7));
+    background-image: var(--grain), linear-gradient(180deg, var(--bg-1), rgba(240,234,216,0.7));
+    background-repeat: repeat, no-repeat;
+    background-size: 140px 140px, 100% 100%;
     border: 1px solid var(--border-1);
     backdrop-filter: blur(10px);
     box-shadow: 0 4px 20px rgba(120,100,60,0.08);
+  }
+  .glass-sage{
+    background-image: var(--grain), linear-gradient(160deg, rgba(219,231,205,0.85), rgba(198,217,182,0.55));
+    border-color: rgba(79,122,69,0.3);
+  }
+  .glass-lavender{
+    background-image: var(--grain), linear-gradient(160deg, rgba(228,220,238,0.85), rgba(210,197,226,0.55));
+    border-color: rgba(138,111,168,0.28);
+  }
+  .glass-honey{
+    background-image: var(--grain), linear-gradient(160deg, rgba(240,225,190,0.85), rgba(230,208,163,0.55));
+    border-color: rgba(168,121,31,0.3);
+  }
+  .glass-terracotta{
+    background-image: var(--grain), linear-gradient(160deg, rgba(238,213,200,0.85), rgba(224,188,172,0.55));
+    border-color: rgba(168,80,58,0.3);
   }
   .neon-text{
     color: var(--neon-cyan);
@@ -150,6 +169,25 @@ function fmtDateTime(d) {
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + " · " +
         dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
+// Parses a value that may already be a number, or may be a currency-formatted
+// display string like "$13,000.00" or "(500.00)" (accounting-style negative),
+// which happens whenever the source Excel cell has a $/comma number format —
+// plain parseFloat() chokes on the leading "$" and silently returns NaN.
+function parseMoney(v) {
+    if (typeof v === 'number')
+        return isNaN(v) ? 0 : v;
+    if (v == null)
+        return 0;
+    let s = String(v).trim();
+    if (!s)
+        return 0;
+    const isNegative = /^\(.*\)$/.test(s) || s.trim().startsWith('-');
+    s = s.replace(/[^0-9.]/g, '');
+    const n = parseFloat(s);
+    if (isNaN(n))
+        return 0;
+    return isNegative ? -n : n;
+}
 // Age = days since the INVOICE date (not the due date). Computed live so it
 // keeps climbing day to day even between weekly uploads, rather than being
 // frozen at whatever the aged-AR export said on upload day.
@@ -178,6 +216,19 @@ function initialsColor(initials) {
         h = (h * 31 + c.charCodeAt(0)) % palette.length;
     return palette[h];
 }
+function hexToRgb(hex) {
+    const m = hex.replace('#', '').match(/.{2}/g);
+    return m.map(x => parseInt(x, 16));
+}
+function personalCardStyle(hex) {
+    const [r, g, b] = hexToRgb(hex);
+    return {
+        backgroundImage: `var(--grain), linear-gradient(160deg, rgba(${r},${g},${b},0.22), rgba(${r},${g},${b},0.08))`,
+        backgroundRepeat: "repeat, no-repeat",
+        backgroundSize: "140px 140px, 100% 100%",
+        borderColor: `rgba(${r},${g},${b},0.4)`,
+    };
+}
 /* ============================================================
    LOGIN SCREEN
    ============================================================ */
@@ -198,7 +249,7 @@ function LoginScreen({ onLoggedIn }) {
                 React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(63,110,107,0.35)]" }),
                 React.createElement("h1", { className: "text-xl font-extrabold tracking-tight neon-text" }, "Basin Collections")),
             React.createElement("p", { className: "text-stone-500 text-sm mb-6" }, "Who's working the aged receivables?"),
-            React.createElement("div", { className: "space-y-2" }, TEAM.map(person => (React.createElement("button", { key: person.id, className: "w-full flex items-center gap-3 glass rounded-xl p-3 hover:border-emerald-400 transition text-left", onClick: () => onLoggedIn(person) },
+            React.createElement("div", { className: "space-y-2" }, TEAM.map(person => (React.createElement("button", { key: person.id, className: "w-full flex items-center gap-3 glass rounded-xl p-3 hover:border-emerald-400 transition text-left", style: personalCardStyle(initialsColor(person.initials)), onClick: () => onLoggedIn(person) },
                 React.createElement("div", { className: "avatar", style: { background: initialsColor(person.initials), color: "#04141a" } }, person.initials),
                 React.createElement("div", null,
                     React.createElement("div", { className: "font-semibold text-stone-700" }, person.display_name),
@@ -224,7 +275,7 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
     }
     return (React.createElement("div", { className: "fixed inset-0 z-40 flex justify-end" },
         React.createElement("div", { className: "absolute inset-0 bg-stone-900/40", onClick: onClose }),
-        React.createElement("div", { className: "relative w-full max-w-lg h-full glass border-l border-stone-300 p-6 overflow-y-auto pop-in" },
+        React.createElement("div", { className: "relative w-full max-w-lg h-full glass glass-lavender border-l border-stone-300 p-6 overflow-y-auto pop-in" },
             React.createElement("div", { className: "flex items-start justify-between mb-1" },
                 React.createElement("div", null,
                     React.createElement("div", { className: "text-xs uppercase tracking-wide text-stone-500" }, (_a = invoice.customers) === null || _a === void 0 ? void 0 : _a.name),
@@ -270,7 +321,7 @@ function PriorityAlarm({ invoices, onOpen, onUnflag, canEdit }) {
         React.createElement("div", { className: "bg-stone-900/10 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" }, invoices.map(inv => {
             var _a;
             const age = computeAge(inv.invoice_date);
-            return (React.createElement("div", { key: inv.id, className: "glass rounded-xl p-3 hover:border-red-400 transition cursor-pointer group", onClick: () => onOpen(inv) },
+            return (React.createElement("div", { key: inv.id, className: "glass glass-terracotta rounded-xl p-3 hover:border-red-400 transition cursor-pointer group", onClick: () => onOpen(inv) },
                 React.createElement("div", { className: "flex items-start justify-between gap-2" },
                     React.createElement("div", { className: "min-w-0" },
                         React.createElement("div", { className: "text-xs text-stone-500 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
@@ -319,8 +370,8 @@ function parseAgedARWorkbook(workbook) {
                 document_number: docNum,
                 po_number: (r[4] || "").toString().trim() || null,
                 due_date: r[5] || null,
-                age: parseInt(r[6], 10) || 0,
-                open_balance: parseFloat(r[7]) || 0,
+                age: parseInt(String(r[6]).replace(/[^0-9-]/g, ''), 10) || 0,
+                open_balance: parseMoney(r[7]),
             });
         }
     }
@@ -423,7 +474,7 @@ function UploadButton({ profile, onDone }) {
    ============================================================ */
 function InvoiceRow({ inv, canEdit, onOpenNotes, onTogglePriority, noteCount, selectMode, selected, onToggleSelect }) {
     const age = computeAge(inv.invoice_date);
-    return (React.createElement("div", { className: "grid grid-cols-12 gap-2 items-center px-4 py-2.5 hover:bg-stone-200/50 rounded-lg cursor-pointer group", onClick: () => selectMode ? onToggleSelect(inv.id) : onOpenNotes(inv) },
+    return (React.createElement("div", { className: "grid grid-cols-12 gap-2 items-center px-4 py-2.5 even:bg-stone-900/[0.025] hover:bg-stone-200/50 rounded-lg cursor-pointer group", onClick: () => selectMode ? onToggleSelect(inv.id) : onOpenNotes(inv) },
         React.createElement("div", { className: "col-span-3 font-mono text-sm text-stone-700 flex items-center gap-2" },
             selectMode && (React.createElement("input", { type: "checkbox", checked: selected, onChange: () => onToggleSelect(inv.id), onClick: (e) => e.stopPropagation(), className: "w-4 h-4 accent-emerald-500 flex-shrink-0" })),
             inv.document_number,
@@ -453,7 +504,7 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
     }
     return (React.createElement("div", { className: "fixed inset-0 z-40 flex items-center justify-center px-4" },
         React.createElement("div", { className: "absolute inset-0 bg-stone-900/40", onClick: onClose }),
-        React.createElement("div", { className: "relative w-full max-w-md glass rounded-2xl p-6 pop-in" },
+        React.createElement("div", { className: "relative w-full max-w-md glass glass-lavender rounded-2xl p-6 pop-in" },
             React.createElement("h2", { className: "text-lg font-bold text-stone-800 mb-1" },
                 "Add note to ",
                 invoiceIds.length,
@@ -491,7 +542,8 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
         await onBulkAddNote(invoiceIds, body);
         exitSelectMode();
     }
-    return (React.createElement("div", { className: "glass rounded-xl mb-3 overflow-hidden" },
+    const urgencyColor = maxAge > 75 ? "var(--neon-pink)" : maxAge >= 46 ? "var(--neon-amber)" : "var(--neon-green)";
+    return (React.createElement("div", { className: "glass rounded-xl mb-3 overflow-hidden", style: { borderLeft: "4px solid " + urgencyColor } },
         React.createElement("div", { className: "w-full flex items-center justify-between px-4 py-3 hover:bg-stone-200/50 cursor-pointer", onClick: onToggleOpen },
             React.createElement("div", { className: "flex items-center gap-3" },
                 React.createElement("span", { className: "text-stone-500 text-xs" }, isOpen ? "▾" : "▸"),
@@ -541,9 +593,9 @@ function bucketFor(age) {
     return "b0";
 }
 const BUCKET_META = {
-    b0: { label: "0–45 Days", color: "var(--neon-green)", chip: "age-chip-safe" },
-    b46: { label: "46–75 Days", color: "var(--neon-amber)", chip: "age-chip-watch" },
-    b76: { label: "76+ Days", color: "var(--neon-pink)", chip: "age-chip-danger" },
+    b0: { label: "0–45 Days", color: "var(--neon-green)", chip: "age-chip-safe", tint: "glass-sage" },
+    b46: { label: "46–75 Days", color: "var(--neon-amber)", chip: "age-chip-watch", tint: "glass-honey" },
+    b76: { label: "76+ Days", color: "var(--neon-pink)", chip: "age-chip-danger", tint: "glass-terracotta" },
 };
 const CUSTOMER_PALETTE = ["#3f6e6b", "#a8503a", "#a8791f", "#4f7a45", "#8a6fa8"];
 function HorizontalBarRow({ label, value, share, color }) {
@@ -559,7 +611,7 @@ function HorizontalBarRow({ label, value, share, color }) {
             React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
 }
 function AgingBandChart({ grandTotals }) {
-    return (React.createElement("div", { className: "glass rounded-xl p-4" },
+    return (React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
         React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-3" }, "Total A/R by Aging Band"),
         ["b0", "b46", "b76"].map(key => {
             const meta = BUCKET_META[key];
@@ -572,7 +624,7 @@ function TopCustomersChart({ byCustomer, grandTotal }) {
     const top5 = sorted.slice(0, 5);
     const rest = sorted.slice(5);
     const restTotal = rest.reduce((s, c) => s + c.total, 0);
-    return (React.createElement("div", { className: "glass rounded-xl p-4" },
+    return (React.createElement("div", { className: "glass glass-lavender rounded-xl p-4" },
         React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-3" }, "Total A/R \u2014 Top 5 Customers vs. All Others"),
         top5.map((c, i) => {
             const share = grandTotal > 0 ? (c.total / grandTotal * 100) : 0;
@@ -614,7 +666,7 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices })
     const totalBalance = invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0);
     return (React.createElement("div", { className: "fixed inset-0 z-50 flex items-center justify-center px-4" },
         React.createElement("div", { className: "absolute inset-0 bg-stone-900/50", onClick: onClose }),
-        React.createElement("div", { className: "relative w-full max-w-2xl max-h-[85vh] glass rounded-2xl p-6 overflow-y-auto pop-in" },
+        React.createElement("div", { className: "relative w-full max-w-2xl max-h-[85vh] glass glass-lavender rounded-2xl p-6 overflow-y-auto pop-in" },
             React.createElement("div", { className: "flex items-start justify-between mb-1 gap-3" },
                 React.createElement("div", null,
                     React.createElement("h2", { className: "text-lg font-bold text-stone-800" }, customerName),
@@ -683,7 +735,7 @@ function AgingSummary({ invoices, onViewCustomerNotes }) {
     return (React.createElement("div", null,
         React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" }, ["b0", "b46", "b76"].map(key => {
             const meta = BUCKET_META[key];
-            return (React.createElement("div", { key: key, className: "glass rounded-xl p-4", style: { borderColor: meta.color + "55" } },
+            return (React.createElement("div", { key: key, className: "glass " + meta.tint + " rounded-xl p-4", style: { borderColor: meta.color + "55" } },
                 React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide " + meta.chip }, meta.label),
                 React.createElement("div", { className: "text-2xl font-extrabold mt-2", style: { color: meta.color } }, fmtMoney(grandTotals[key])),
                 React.createElement("div", { className: "text-xs text-stone-500 mt-0.5" },
@@ -877,13 +929,13 @@ function Dashboard({ profile, onSignOut }) {
                     React.createElement("button", { className: "btn btn-ghost", onClick: onSignOut }, "Switch user")))),
         React.createElement("div", { className: "max-w-6xl mx-auto px-5 mt-6" },
             React.createElement("div", { className: "grid grid-cols-3 gap-3 mb-6" },
-                React.createElement("div", { className: "glass rounded-xl p-4" },
+                React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
                     React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "Total Open A/R"),
                     React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, fmtMoney(totalBalance))),
-                React.createElement("div", { className: "glass rounded-xl p-4" },
+                React.createElement("div", { className: "glass glass-lavender rounded-xl p-4" },
                     React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "Invoices Tracked"),
                     React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, invoices.length)),
-                React.createElement("div", { className: "glass rounded-xl p-4" },
+                React.createElement("div", { className: "glass glass-terracotta rounded-xl p-4" },
                     React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "75+ Days Overdue"),
                     React.createElement("div", { className: "text-2xl font-extrabold mt-1", style: { color: "var(--neon-pink)" } }, fmtMoney(overdueBalance)),
                     React.createElement("div", { className: "text-xs text-stone-500 mt-0.5" },
