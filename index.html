@@ -270,7 +270,9 @@ function LoginScreen({ onLoggedIn }) {
         React.createElement("div", { className: "w-full max-w-sm glass rounded-2xl p-8 pop-in" },
             React.createElement("div", { className: "flex items-center gap-2 mb-1" },
                 React.createElement("img", { src: BASIN_LOGO, alt: "Basin logo", className: "h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(63,110,107,0.35)]" }),
-                React.createElement("h1", { className: "text-xl font-extrabold tracking-tight neon-text" }, "Basin Collections")),
+                React.createElement("div", null,
+                    React.createElement("h1", { className: "text-xl font-extrabold tracking-tight neon-text leading-tight" }, "Basin Collections"),
+                    React.createElement("p", { className: "text-[11px] text-stone-500 -mt-0.5" }, "Receivables Intelligence"))),
             React.createElement("p", { className: "text-stone-500 text-sm mb-6" }, "Who's working the aged receivables?"),
             React.createElement("div", { className: "space-y-2" }, TEAM.map(person => (React.createElement("button", { key: person.id, className: "w-full flex items-center gap-3 glass rounded-xl p-3 hover:border-emerald-400 transition text-left", style: personalCardStyle(initialsColor(person.initials)), onClick: () => onLoggedIn(person) },
                 React.createElement("div", { className: "avatar", style: { background: initialsColor(person.initials), color: "#04141a" } }, firstLetter(person.initials)),
@@ -281,10 +283,11 @@ function LoginScreen({ onLoggedIn }) {
 /* ============================================================
    NOTES PANEL (slide-over)
    ============================================================ */
-function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
+function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote, onDeleteNote }) {
     var _a;
     const [draft, setDraft] = useState("");
     const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const listRef = useRef(null);
     useEffect(() => { if (listRef.current)
         listRef.current.scrollTop = 0; }, [notes]);
@@ -295,6 +298,13 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
         await onAddNote(invoice.id, draft.trim());
         setDraft("");
         setSaving(false);
+    }
+    async function handleDelete(noteId) {
+        if (!window.confirm("Delete this note? This can't be undone."))
+            return;
+        setDeletingId(noteId);
+        await onDeleteNote(noteId, invoice.id);
+        setDeletingId(null);
     }
     return (React.createElement("div", { className: "fixed inset-0 z-40 flex justify-end" },
         React.createElement("div", { className: "absolute inset-0 bg-stone-900/40", onClick: onClose }),
@@ -323,7 +333,9 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote }) {
                     React.createElement("div", { className: "flex-1 min-w-0" },
                         React.createElement("div", { className: "flex items-baseline justify-between gap-2" },
                             React.createElement("span", { className: "text-sm font-semibold text-stone-700" }, n.author_name),
-                            React.createElement("span", { className: "text-xs text-stone-500 flex-shrink-0" }, fmtDateTime(n.created_at))),
+                            React.createElement("div", { className: "flex items-center gap-2 flex-shrink-0" },
+                                React.createElement("span", { className: "text-xs text-stone-500" }, fmtDateTime(n.created_at)),
+                                canEdit && onDeleteNote && (React.createElement("button", { onClick: () => handleDelete(n.id), disabled: deletingId === n.id, title: "Delete note", className: "text-stone-400 hover:text-red-500 transition text-xs leading-none" }, deletingId === n.id ? "…" : "🗑")))),
                         React.createElement("p", { className: "text-sm text-stone-600 whitespace-pre-wrap break-words mt-0.5" }, n.body)))))),
             canEdit ? (React.createElement("div", { className: "glass rounded-lg p-3" },
                 React.createElement("textarea", { className: "input w-full resize-none", rows: 5, placeholder: `Add a note as ${profile.display_name}… (left a voicemail, promised payment by 7/18, etc.)`, value: draft, onChange: e => setDraft(e.target.value) }),
@@ -675,42 +687,53 @@ const BUCKET_META = {
 };
 const CUSTOMER_PALETTE = ["#3f6e6b", "#a8503a", "#a8791f", "#4f7a45", "#8a6fa8"];
 function DSOTrendChart({ history }) {
+    const TARGET_DSO = 55;
+    const Y_MIN = 30, Y_MAX = 100;
+    const ACCENT = "#f2c14e"; // warm gold — distinct from the purple/teal panel and the white DSO figure
     if (!history || history.length === 0) {
         return (React.createElement("p", { className: "text-center text-xs py-6", style: { color: "rgba(255,255,255,0.6)" } }, "No DSO data in this time period yet."));
     }
-    const values = history.map(h => Number(h.dso));
-    const rawMin = Math.min(...values);
-    const rawMax = Math.max(...values);
-    const pad = (rawMax - rawMin) * 0.15 || rawMax * 0.1 || 5;
-    const minV = Math.max(0, rawMin - pad);
-    const maxV = rawMax + pad;
-    const range = (maxV - minV) || 1;
-    const padTop = 22, padBottom = 22, padSide = 20;
-    const W = 640, H = 120;
-    const plotW = W - padSide * 2;
+    const padTop = 18, padBottom = 26, padLeft = 32, padRight = 14;
+    const W = 640, H = 170;
+    const plotW = W - padLeft - padRight;
     const plotH = H - padTop - padBottom;
+    const yForValue = (v) => padTop + plotH - ((v - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
     const points = history.map((h, i) => {
-        const x = history.length === 1 ? padSide + plotW / 2 : padSide + (i / (history.length - 1)) * plotW;
-        const y = padTop + plotH - ((Number(h.dso) - minV) / range) * plotH;
-        return { x, y, date: h.snapshot_date, value: Number(h.dso) };
+        const x = history.length === 1 ? padLeft + plotW / 2 : padLeft + (i / (history.length - 1)) * plotW;
+        const clamped = Math.max(Y_MIN, Math.min(Y_MAX, Number(h.dso)));
+        return { x, y: yForValue(clamped), date: h.snapshot_date, value: Number(h.dso) };
     });
     const linePath = points.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
     const areaPath = points.length > 1
         ? linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`
         : "";
+    const gridValues = [30, 40, 50, 60, 70, 80, 90, 100];
+    const targetY = yForValue(TARGET_DSO);
     return (React.createElement("div", null,
-        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "120px" } },
+        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "170px" } },
             React.createElement("defs", null,
                 React.createElement("linearGradient", { id: "dsoFill", x1: "0", y1: "0", x2: "0", y2: "1" },
-                    React.createElement("stop", { offset: "0%", stopColor: "rgba(255,255,255,0.4)" }),
-                    React.createElement("stop", { offset: "100%", stopColor: "rgba(255,255,255,0)" }))),
+                    React.createElement("stop", { offset: "0%", stopColor: ACCENT, stopOpacity: "0.35" }),
+                    React.createElement("stop", { offset: "100%", stopColor: ACCENT, stopOpacity: "0" }))),
+            gridValues.map(v => {
+                const y = yForValue(v);
+                return (React.createElement("g", { key: v },
+                    React.createElement("line", { x1: padLeft, x2: W - padRight, y1: y, y2: y, stroke: "rgba(255,255,255,0.14)", strokeWidth: "1" }),
+                    React.createElement("text", { x: padLeft - 6, y: y + 3, textAnchor: "end", fontSize: "9", fill: "rgba(255,255,255,0.55)" }, v)));
+            }),
+            points.length > 1 && points.slice(0, -1).map((p, i) => (React.createElement("line", { key: "v" + i, x1: p.x, x2: p.x, y1: padTop, y2: padTop + plotH, stroke: "rgba(255,255,255,0.06)", strokeWidth: "1" }))),
+            React.createElement("line", { x1: padLeft, x2: W - padRight, y1: targetY, y2: targetY, stroke: "rgba(255,255,255,0.85)", strokeWidth: "1.5", strokeDasharray: "5,4" }),
+            React.createElement("text", { x: W - padRight, y: targetY - 5, textAnchor: "end", fontSize: "10", fontWeight: "700", fill: "rgba(255,255,255,0.9)" },
+                "Target: ",
+                TARGET_DSO,
+                "d"),
             points.length > 1 && (React.createElement(React.Fragment, null,
                 React.createElement("path", { d: areaPath, fill: "url(#dsoFill)" }),
-                React.createElement("path", { d: linePath, fill: "none", stroke: "rgba(255,255,255,0.95)", strokeWidth: "2", strokeLinejoin: "round", strokeLinecap: "round" }))),
+                React.createElement("path", { d: linePath, fill: "none", stroke: ACCENT, strokeWidth: "2.5", strokeLinejoin: "round", strokeLinecap: "round" }))),
             points.map((p, i) => (React.createElement("g", { key: i },
-                React.createElement("circle", { cx: p.x, cy: p.y, r: "3.5", fill: "#fff", stroke: "rgba(0,0,0,0.25)", strokeWidth: "1" }),
-                React.createElement("text", { x: p.x, y: p.y - 9, textAnchor: "middle", fontSize: "10", fontWeight: "700", fill: "#fff" }, Math.round(p.value)),
-                React.createElement("text", { x: p.x, y: H - 6, textAnchor: "middle", fontSize: "9", fill: "rgba(255,255,255,0.75)" }, fmtDate(p.date)))))),
+                React.createElement("circle", { cx: p.x, cy: p.y, r: "4", fill: ACCENT, stroke: "#4a3b63", strokeWidth: "1.5" }),
+                React.createElement("text", { x: p.x, y: p.y - 10, textAnchor: "middle", fontSize: "10", fontWeight: "700", fill: "#fff" }, Math.round(p.value)),
+                React.createElement("text", { x: p.x, y: H - 8, textAnchor: "middle", fontSize: "9", fill: "rgba(255,255,255,0.75)" }, fmtDate(p.date)))))),
         points.length === 1 && (React.createElement("p", { className: "text-center text-xs", style: { color: "rgba(255,255,255,0.75)" } }, "First week tracked \u2014 upload next week's report to start seeing the trend."))));
 }
 function ComparisonBarRow({ label, value, share, priorValue, priorShare, color }) {
@@ -869,9 +892,10 @@ function RecentNotesModal({ onClose, onOpenCustomer }) {
                             React.createElement("span", { className: "text-sm text-stone-700 break-words" }, n.body)))));
             }))))));
 }
-function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices }) {
+function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices, canEdit }) {
     const [notesByInvoice, setNotesByInvoice] = useState({});
     const [loadingNotes, setLoadingNotes] = useState(true);
+    const [deletingId, setDeletingId] = useState(null);
     useEffect(() => {
         let cancelled = false;
         async function load() {
@@ -894,6 +918,17 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices })
         return () => { cancelled = true; };
         // eslint-disable-next-line
     }, [customerName]);
+    async function handleDelete(noteId, invoiceId) {
+        if (!window.confirm("Delete this note? This can't be undone."))
+            return;
+        setDeletingId(noteId);
+        await db.from('notes').delete().eq('id', noteId);
+        setNotesByInvoice(prev => ({
+            ...prev,
+            [invoiceId]: (prev[invoiceId] || []).filter(n => n.id !== noteId),
+        }));
+        setDeletingId(null);
+    }
     const sortedInvoices = useMemo(() => [...invoices].sort((a, b) => computeAge(b.invoice_date) - computeAge(a.invoice_date)), [invoices]);
     const totalBalance = invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0);
     return (React.createElement("div", { className: "fixed inset-0 z-50 flex items-center justify-center px-4" },
@@ -922,11 +957,12 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices })
                                 age,
                                 "d"),
                             React.createElement("span", { className: "text-sm font-semibold text-stone-700" }, fmtMoney(inv.open_balance)))),
-                    notes.length === 0 ? (React.createElement("div", { className: "text-xs text-stone-500 italic" }, "No notes yet")) : (React.createElement("div", { className: "space-y-1.5" }, notes.map(n => (React.createElement("div", { key: n.id, className: "flex gap-2 text-sm" },
+                    notes.length === 0 ? (React.createElement("div", { className: "text-xs text-stone-500 italic" }, "No notes yet")) : (React.createElement("div", { className: "space-y-1.5" }, notes.map(n => (React.createElement("div", { key: n.id, className: "flex gap-2 text-sm items-start" },
                         React.createElement("div", { className: "avatar flex-shrink-0", style: { width: "1.5rem", height: "1.5rem", fontSize: ".6rem", background: initialsColor(n.author_initials), color: "#04141a" } }, firstLetter(n.author_initials)),
-                        React.createElement("div", { className: "min-w-0" },
+                        React.createElement("div", { className: "min-w-0 flex-1" },
                             React.createElement("span", { className: "text-stone-500 text-xs mr-2" }, fmtDateTime(n.created_at)),
-                            React.createElement("span", { className: "text-stone-600 break-words" }, n.body)))))))));
+                            React.createElement("span", { className: "text-stone-600 break-words" }, n.body)),
+                        canEdit && (React.createElement("button", { onClick: () => handleDelete(n.id, inv.id), disabled: deletingId === n.id, title: "Delete note", className: "text-stone-400 hover:text-red-500 transition text-xs leading-none flex-shrink-0" }, deletingId === n.id ? "…" : "🗑")))))))));
             }))))));
 }
 function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
@@ -1044,8 +1080,8 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
             return agg;
         });
     }, [grouped]);
-    const [tableSortCol, setTableSortCol] = useState("b76");
-    const [tableSortDir, setTableSortDir] = useState("desc");
+    const [tableSortCol, setTableSortCol] = useState("name");
+    const [tableSortDir, setTableSortDir] = useState("asc");
     function handleSortClick(col) {
         if (tableSortCol === col) {
             setTableSortDir(d => d === "asc" ? "desc" : "asc");
@@ -1157,7 +1193,8 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                 { col: "total", label: "Total", span: "col-span-2", align: "text-right" },
             ].map(({ col, label, span, align }) => (React.createElement("button", { key: col, className: span + " " + align + " flex items-center gap-1 hover:opacity-70 cursor-pointer bg-transparent border-0 p-0 " + (align === "text-right" ? "justify-end" : "justify-start"), style: { color: "inherit", font: "inherit", textShadow: "inherit" }, onClick: () => handleSortClick(col) },
                 label,
-                tableSortCol === col && React.createElement("span", null, tableSortDir === "asc" ? "▲" : "▼"))))),
+                tableSortCol === col && React.createElement("span", null, tableSortDir === "asc" ? "▲" : "▼"),
+                col === "name" && (React.createElement("span", { className: "ml-3 text-[10px] normal-case font-normal tracking-normal opacity-70", style: { textShadow: "none" } }, "\uD83D\uDEA8 = 25%+ of balance is 76+ days")))))),
             sortedByCustomer.map(c => {
                 const pct76 = c.total > 0 ? (c.b76 / c.total * 100) : 0;
                 return (React.createElement("div", { key: c.name, className: "grid grid-cols-12 gap-2 px-4 py-2.5 items-center hover:bg-stone-200/50 cursor-pointer border-b border-stone-200/60 last:border-b-0", onClick: () => onViewCustomerNotes(c.name, grouped[c.name]) },
@@ -1258,6 +1295,11 @@ function Dashboard({ profile, onSignOut }) {
         });
         loadNotesFor(invoiceId);
     }
+    async function deleteNote(noteId, invoiceId) {
+        await db.from('notes').delete().eq('id', noteId);
+        loadNotesFor(invoiceId);
+        loadNoteCounts();
+    }
     async function addNoteBulk(invoiceIds, body) {
         const rows = invoiceIds.map(invoice_id => ({
             invoice_id,
@@ -1314,6 +1356,11 @@ function Dashboard({ profile, onSignOut }) {
     }, [filtered, sortMode]);
     const priorityInvoices = useMemo(() => invoices.filter(i => i.is_priority), [invoices]);
     const totalBalance = useMemo(() => invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0), [invoices]);
+    const asOfDate = useMemo(() => {
+        if (invoices.length === 0)
+            return null;
+        return invoices.reduce((max, inv) => (inv.last_seen_upload > max ? inv.last_seen_upload : max), invoices[0].last_seen_upload);
+    }, [invoices]);
     const bucketCounts = useMemo(() => {
         const c = { b0: 0, b46: 0, b76: 0 };
         invoices.forEach(inv => { c[bucketFor(computeAge(inv.invoice_date))]++; });
@@ -1348,7 +1395,10 @@ function Dashboard({ profile, onSignOut }) {
             React.createElement("div", { className: "grid grid-cols-2 gap-3 mb-6" },
                 React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
                     React.createElement("div", { className: "text-xs text-stone-500 uppercase tracking-wide" }, "Total Open A/R"),
-                    React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, fmtMoney(totalBalance))),
+                    React.createElement("div", { className: "text-2xl font-extrabold text-stone-800 mt-1" }, fmtMoney(totalBalance)),
+                    asOfDate && (React.createElement("div", { className: "text-[11px] text-stone-500 mt-1" },
+                        "As of ",
+                        fmtDate(asOfDate)))),
                 React.createElement("div", { className: "relative rounded-xl overflow-hidden border border-stone-300", style: {
                         backgroundImage: invoices.length > 0
                             ? `linear-gradient(180deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.08) 16%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.10) 78%, rgba(0,0,0,0.22) 100%), var(--grain), linear-gradient(90deg, ${(() => {
@@ -1422,8 +1472,8 @@ function Dashboard({ profile, onSignOut }) {
                             loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-20 glass rounded-xl" },
                                 "No invoices yet. ",
                                 canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes })))))))))),
-        selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote })),
-        notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); } })),
+        selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote, onDeleteNote: deleteNote })),
+        notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); }, canEdit: canEdit })),
         recentNotesOpen && (React.createElement(RecentNotesModal, { onClose: () => setRecentNotesOpen(false), onOpenCustomer: (name) => { jumpToCustomer(name); setRecentNotesOpen(false); } })),
         bigPaymentsOpen && (React.createElement(BigPaymentsModal, { onClose: () => setBigPaymentsOpen(false), onOpenCustomer: (name) => { jumpToCustomer(name); setBigPaymentsOpen(false); } }))));
 }
