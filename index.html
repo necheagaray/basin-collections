@@ -166,6 +166,20 @@ function fmtDate(d) {
         return "—";
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
+function buildInvoiceCopyText(customerName, invoices) {
+    const sorted = [...invoices].sort((a, b) => new Date(a.invoice_date) - new Date(b.invoice_date));
+    const lines = sorted.map(inv => {
+        const date = fmtDate(inv.invoice_date);
+        const num = inv.document_number || "—";
+        const po = inv.po_number || "—";
+        const amt = fmtMoney(inv.open_balance);
+        return `Invoice ${num}    Date: ${date}    PO: ${po}    Amount: ${amt}`;
+    });
+    const total = sorted.reduce((s, i) => s + Number(i.open_balance || 0), 0);
+    const header = `Outstanding Invoices — ${customerName}`;
+    const footer = `Total: ${fmtMoney(total)} (${sorted.length} invoice${sorted.length === 1 ? "" : "s"})`;
+    return [header, "", ...lines, "", footer].join("\n");
+}
 function fmtDateTime(d) {
     const dt = new Date(d);
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + " · " +
@@ -628,12 +642,17 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
                 React.createElement("button", { className: "btn btn-ghost", onClick: onClose }, "Cancel"),
                 React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : `Add to ${invoiceIds.length} invoice${invoiceIds.length > 1 ? "s" : ""}`)))));
 }
-function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, isOpen, onToggleOpen, onBulkAddNote, profile, onViewCustomerNotes }) {
+function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, isOpen, onToggleOpen, onBulkAddNote, profile, onViewCustomerNotes, onAssignCustomer }) {
+    var _a, _b, _c, _d;
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
     const [bulkModalOpen, setBulkModalOpen] = useState(false);
+    const [justCopied, setJustCopied] = useState(false);
     const total = invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0);
     const maxAge = Math.max(...invoices.map(i => computeAge(i.invoice_date)));
+    const customerId = (_a = invoices[0]) === null || _a === void 0 ? void 0 : _a.customer_id;
+    const assignedTo = ((_c = (_b = invoices[0]) === null || _b === void 0 ? void 0 : _b.customers) === null || _c === void 0 ? void 0 : _c.assigned_to) || "";
+    const assignableTeam = TEAM.filter(p => p.role === "editor");
     function toggleSelect(id) {
         setSelected(prev => {
             const next = new Set(prev);
@@ -644,6 +663,9 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
             return next;
         });
     }
+    function selectAll() {
+        setSelected(new Set(invoices.map(i => i.id)));
+    }
     function exitSelectMode() {
         setSelectMode(false);
         setSelected(new Set());
@@ -652,32 +674,54 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
         await onBulkAddNote(invoiceIds, body);
         exitSelectMode();
     }
+    async function handleCopyForEmail() {
+        const selectedInvoices = invoices.filter(i => selected.has(i.id));
+        if (selectedInvoices.length === 0)
+            return;
+        const text = buildInvoiceCopyText(name, selectedInvoices);
+        try {
+            await navigator.clipboard.writeText(text);
+            setJustCopied(true);
+            setTimeout(() => setJustCopied(false), 2000);
+        }
+        catch (e) {
+            window.alert("Couldn't copy to clipboard — your browser may be blocking clipboard access.");
+        }
+    }
     const urgencyColor = maxAge > 75 ? "var(--neon-pink)" : maxAge >= 46 ? "var(--neon-amber)" : "var(--neon-green)";
     return (React.createElement("div", { className: "glass rounded-xl mb-3 overflow-hidden", style: { borderLeft: "4px solid " + urgencyColor } },
-        React.createElement("div", { className: "w-full flex items-center justify-between px-4 py-3 hover:bg-stone-200/50 cursor-pointer", onClick: onToggleOpen },
-            React.createElement("div", { className: "flex items-center gap-3" },
+        React.createElement("div", { className: "w-full flex items-center justify-between flex-wrap gap-y-2 px-4 py-3 hover:bg-stone-200/50 cursor-pointer", onClick: onToggleOpen },
+            React.createElement("div", { className: "flex items-center gap-3 flex-wrap" },
                 React.createElement("span", { className: "text-stone-500 text-xs" }, isOpen ? "▾" : "▸"),
                 React.createElement("span", { className: "font-bold text-stone-800" }, name),
                 React.createElement("span", { className: "text-xs text-stone-500" },
                     invoices.length,
                     " invoice",
                     invoices.length > 1 ? "s" : ""),
-                maxAge > 75 && React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold age-chip-danger" }, "OVERDUE")),
+                maxAge > 75 && React.createElement("span", { className: "px-2 py-0.5 rounded-full text-[10px] font-bold age-chip-danger" }, "OVERDUE"),
+                canEdit ? (React.createElement("select", { className: "text-[11px] rounded-full px-2 py-0.5 border border-stone-300 bg-white/70 text-stone-600", value: assignedTo, onClick: (e) => e.stopPropagation(), onChange: (e) => { e.stopPropagation(); onAssignCustomer(customerId, e.target.value); } },
+                    React.createElement("option", { value: "" }, "Unassigned"),
+                    assignableTeam.map(p => React.createElement("option", { key: p.id, value: p.id }, p.display_name)))) : (assignedTo && (React.createElement("span", { className: "text-[11px] rounded-full px-2 py-0.5 bg-stone-200 text-stone-600" }, ((_d = TEAM.find(p => p.id === assignedTo)) === null || _d === void 0 ? void 0 : _d.display_name) || assignedTo)))),
             React.createElement("div", { className: "flex items-center gap-3" },
                 React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); onViewCustomerNotes(name, invoices); } }, "\uD83D\uDCCB Notes"),
-                canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); selectMode ? exitSelectMode() : setSelectMode(true); } }, selectMode ? "Cancel" : "Select")),
+                React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: (e) => { e.stopPropagation(); selectMode ? exitSelectMode() : setSelectMode(true); } }, selectMode ? "Cancel" : "Select"),
                 React.createElement("span", { className: "font-bold", style: { color: "var(--neon-cyan)" } }, fmtMoney(total)))),
         isOpen && (React.createElement("div", { className: "border-t border-stone-300/60 pb-1" },
-            selectMode && (React.createElement("div", { className: "flex items-center justify-between px-4 py-2 bg-emerald-50 border-b border-emerald-200" },
+            selectMode && (React.createElement("div", { className: "flex items-center justify-between flex-wrap gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-200" },
                 React.createElement("span", { className: "text-xs text-emerald-700" },
                     selected.size,
                     " selected"),
                 React.createElement("div", { className: "flex gap-2" },
+                    React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: selectAll },
+                        "Select all (",
+                        invoices.length,
+                        ")"),
                     React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: exitSelectMode }, "Clear"),
-                    React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", disabled: selected.size === 0, onClick: () => setBulkModalOpen(true) },
+                    React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", disabled: selected.size === 0, onClick: handleCopyForEmail }, justCopied ? "✓ Copied!" : `📋 Copy for email (${selected.size})`),
+                    canEdit && (React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", disabled: selected.size === 0, onClick: () => setBulkModalOpen(true) },
                         "\uD83D\uDCDD Note selected (",
                         selected.size,
-                        ")")))),
+                        ")"))))),
             React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-1.5 text-[10px] uppercase tracking-wide text-stone-500" },
                 React.createElement("div", { className: "col-span-3" }, "Invoice #"),
                 React.createElement("div", { className: "col-span-2" }, "PO"),
@@ -1328,7 +1372,7 @@ function Dashboard({ profile, onSignOut }) {
     const loadInvoices = useCallback(async () => {
         const { data, error } = await db
             .from('invoices')
-            .select('*, customers(id,name)')
+            .select('*, customers(id,name,assigned_to)')
             .order('invoice_date', { ascending: true });
         if (!error)
             setInvoices(data || []);
@@ -1392,6 +1436,10 @@ function Dashboard({ profile, onSignOut }) {
             priority_set_by: !inv.is_priority ? profile.display_name : null,
             priority_set_at: !inv.is_priority ? new Date().toISOString() : null,
         }).eq('id', inv.id);
+    }
+    async function assignCustomer(customerId, personId) {
+        await db.from('customers').update({ assigned_to: personId || null }).eq('id', customerId);
+        loadInvoices();
     }
     const customerNames = useMemo(() => [...new Set(invoices.map(i => { var _a; return ((_a = i.customers) === null || _a === void 0 ? void 0 : _a.name) || "Unknown"; }))].sort((a, b) => stripCustomerNumber(a).localeCompare(stripCustomerNumber(b))), [invoices]);
     const filtered = useMemo(() => {
@@ -1556,7 +1604,7 @@ function Dashboard({ profile, onSignOut }) {
                                 customerFilter && (React.createElement("button", { className: "btn btn-ghost", onClick: () => setCustomerFilter("") }, "Show All Customers \u2715"))),
                             loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-20 glass rounded-xl" },
                                 "No invoices yet. ",
-                                canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes })))))))))),
+                                canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes, onAssignCustomer: assignCustomer })))))))))),
         selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote, onDeleteNote: deleteNote })),
         notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); }, canEdit: canEdit })),
         recentNotesOpen && (React.createElement(RecentNotesModal, { onClose: () => setRecentNotesOpen(false), onOpenCustomer: (name) => { jumpToCustomer(name); setRecentNotesOpen(false); } })),
