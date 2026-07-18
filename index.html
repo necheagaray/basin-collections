@@ -430,12 +430,18 @@ function parseAgedARWorkbook(workbook) {
         }
         if (!currentCustomer)
             continue;
-        if (txnType === "Invoice") {
+        if (txnType) {
+            // Any real transaction line — Invoice, Payment, Credit Memo, Journal,
+            // etc. The aging report nets ALL of these together per customer
+            // (confirmed against the report's own "Total - <customer>" rows),
+            // so excluding non-Invoice rows understates credits/payments and
+            // overstates the customer's true open balance.
             const docNum = (r[3] || "").toString().trim();
             if (!docNum)
                 continue;
             invoices.push({
                 customer: currentCustomer,
+                transaction_type: txnType,
                 invoice_date: r[2] || null,
                 document_number: docNum,
                 po_number: (r[4] || "").toString().trim() || null,
@@ -475,18 +481,23 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
         open_balance: inv.open_balance,
         last_seen_upload: uploadLabel,
         report_as_of_date: reportDate || uploadLabel,
+        transaction_type: inv.transaction_type,
     }));
-    const { data: before } = await db.from('invoices').select('document_number, open_balance, customers(name)');
-    const beforeSet = new Set((before || []).map(r => r.document_number));
+    const { data: beforeRaw } = await db.from('invoices').select('document_number, open_balance, customers(name)');
+    // Defensive dedupe by document_number — guards prior-AR totals and big
+    // payment detection against ever double-counting if a duplicate row
+    // somehow exists, regardless of the root cause.
+    const before = [...new Map((beforeRaw || []).map(r => [r.document_number, r])).values()];
+    const beforeSet = new Set(before.map(r => r.document_number));
     const afterSet = new Set(rows.map(r => r.document_number));
     const toRemove = [...beforeSet].filter(d => !afterSet.has(d));
     const addedCount = [...afterSet].filter(d => !beforeSet.has(d)).length;
     // Detect "big payments" — invoices that just disappeared (paid off or
     // written off) whose balance was more than 3% of last week's total AR.
-    const priorTotalAR = (before || []).reduce((s, r) => s + Number(r.open_balance || 0), 0);
+    const priorTotalAR = before.reduce((s, r) => s + Number(r.open_balance || 0), 0);
     if (toRemove.length && priorTotalAR > 0) {
         const removedSet = new Set(toRemove);
-        const bigPayments = (before || [])
+        const bigPayments = before
             .filter(r => removedSet.has(r.document_number))
             .map(r => {
             var _a;
@@ -517,13 +528,15 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
                 throw error;
         }
     }
-    await db.from('uploads_log').insert({
+    const { error: uploadsLogError } = await db.from('uploads_log').insert({
         uploaded_by: uploaderName,
         upload_label: uploadLabel,
         invoice_count: rows.length,
         added_count: addedCount,
         removed_count: toRemove.length,
     });
+    if (uploadsLogError)
+        console.error("uploads_log insert failed:", uploadsLogError);
     // 3) Snapshot this week's aging bands + per-customer totals, so the
     // Aging Summary can compare "this week" against "prior week" later.
     const bandTotals = { b0: 0, b46: 0, b76: 0 };
@@ -537,25 +550,26 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
     });
     const customerTotals = Object.entries(customerTotalsMap).map(([name, total]) => ({ name, total }));
     const totalAR = bandTotals.b0 + bandTotals.b46 + bandTotals.b76;
-    // Lock in this week's DSO using whatever Avg. Monthly Credit Sales is
-    // set right now, so it doesn't shift retroactively if that number is
-    // edited later — the trend chart should reflect what was true then.
-    let dsoValue = null;
-    const { data: settingsRow } = await db.from('company_settings').select('avg_monthly_sales').eq('id', 1).single();
-    const avgSales = settingsRow ? Number(settingsRow.avg_monthly_sales) : 1200000;
-    if (avgSales > 0) {
-        dsoValue = (totalAR / avgSales) * daysInMostRecentCompletedMonth();
-    }
-    await db.from('weekly_snapshots').insert({
+    // DSO is intentionally left unset here (not auto-computed at upload
+    // time) — the team wants a chance to review/update Avg. Monthly Credit
+    // Sales for the period before that week's DSO gets locked in. See
+    // "Post DSO" in the Aging Summary tab, which computes and saves it
+    // using whatever sales figure is set at that later moment.
+    const { error: snapshotError } = await db.from('weekly_snapshots').insert({
         snapshot_date: uploadLabel,
         band_0_45: bandTotals.b0,
         band_46_75: bandTotals.b46,
         band_76_plus: bandTotals.b76,
         total_ar: totalAR,
         customer_totals: customerTotals,
-        dso: dsoValue,
+        dso: null,
     });
-    return { total: rows.length, added: addedCount, removed: toRemove.length, totalAR };
+    if (snapshotError)
+        console.error("weekly_snapshots insert failed:", snapshotError);
+    return {
+        total: rows.length, added: addedCount, removed: toRemove.length, totalAR,
+        snapshotError: snapshotError ? snapshotError.message : null,
+    };
 }
 function UploadButton({ profile, onDone }) {
     const fileRef = useRef(null);
@@ -573,7 +587,8 @@ function UploadButton({ profile, onDone }) {
             const parsed = parseAgedARWorkbook(wb);
             const label = new Date().toISOString().slice(0, 10);
             const result = await syncInvoices(parsed.invoices, profile.display_name, label, parsed.reportDate);
-            setMsg({ ok: true, text: `Synced ${result.total} invoices (${fmtMoney(result.totalAR)} total) — ${result.added} new, ${result.removed} removed (paid/written off).` });
+            const warning = result.snapshotError ? ` ⚠️ Weekly snapshot didn't save (${result.snapshotError}) — DSO tracking may be missing this week.` : "";
+            setMsg({ ok: true, text: `Synced ${result.total} invoices (${fmtMoney(result.totalAR)} total) — ${result.added} new, ${result.removed} removed (paid/written off).${warning}` });
             onDone();
         }
         catch (err) {
@@ -602,6 +617,7 @@ function InvoiceRow({ inv, canEdit, onOpenNotes, onTogglePriority, noteCount, se
         React.createElement("div", { className: "col-span-3 font-mono text-sm text-stone-700 flex items-center gap-2" },
             selectMode && (React.createElement("input", { type: "checkbox", checked: selected, onChange: () => onToggleSelect(inv.id), onClick: (e) => e.stopPropagation(), className: "w-4 h-4 accent-emerald-500 flex-shrink-0" })),
             inv.document_number,
+            inv.transaction_type && inv.transaction_type !== "Invoice" && (React.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded-full bg-stone-200 text-stone-600 border border-stone-300" }, inv.transaction_type)),
             noteCount > 0 && (React.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300" },
                 noteCount,
                 " note",
@@ -1138,21 +1154,33 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         loadPriorSnapshot();
         return () => { cancelled = true; };
     }, [invoices]);
-    const [dsoHistory, setDsoHistory] = useState([]); // [{ snapshot_date, dso }] chronological
-    useEffect(() => {
-        let cancelled = false;
-        async function loadDsoHistory() {
-            const { data, error } = await db.from('weekly_snapshots')
-                .select('snapshot_date, dso')
-                .order('snapshot_date', { ascending: true })
-                .order('created_at', { ascending: true });
-            if (!cancelled && !error && data) {
-                setDsoHistory(data.filter(d => d.dso != null));
-            }
+    const [dsoHistory, setDsoHistory] = useState([]); // [{ snapshot_date, dso }] chronological, posted only
+    const [pendingSnapshot, setPendingSnapshot] = useState(null); // { id, snapshot_date, total_ar } | null — most recent upload awaiting a DSO post
+    const [postingDso, setPostingDso] = useState(false);
+    const reloadDsoData = useCallback(async () => {
+        const { data, error } = await db.from('weekly_snapshots')
+            .select('id, snapshot_date, dso, total_ar')
+            .order('snapshot_date', { ascending: true })
+            .order('created_at', { ascending: true });
+        if (!error && data) {
+            setDsoHistory(data.filter(d => d.dso != null));
+            const pending = [...data].reverse().find(d => d.dso == null) || null;
+            setPendingSnapshot(pending);
         }
-        loadDsoHistory();
-        return () => { cancelled = true; };
-    }, [invoices]);
+    }, []);
+    useEffect(() => {
+        reloadDsoData();
+    }, [invoices, reloadDsoData]);
+    async function postDso() {
+        if (!pendingSnapshot || !avgMonthlySales)
+            return;
+        setPostingDso(true);
+        const computed = (Number(pendingSnapshot.total_ar || 0) / avgMonthlySales) * daysInPeriod;
+        const { error } = await db.from('weekly_snapshots').update({ dso: computed }).eq('id', pendingSnapshot.id);
+        if (!error)
+            await reloadDsoData();
+        setPostingDso(false);
+    }
     const [dsoPeriod, setDsoPeriod] = useState("all"); // 'all' | '1' | '3' | '6' (months)
     const filteredDsoHistory = useMemo(() => {
         if (dsoPeriod === "all")
@@ -1278,6 +1306,11 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: () => setEditingSales(false) }, "Cancel"))) : (React.createElement("div", { className: "flex items-center gap-2 justify-end" },
                             React.createElement("span", { className: "font-bold text-white text-sm" }, avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…"),
                             canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: startEditingSales }, "Edit")))))),
+                pendingSnapshot && (React.createElement("div", { className: "mb-3 p-2.5 rounded-lg flex items-center justify-between flex-wrap gap-2", style: { background: "rgba(242,193,78,0.15)", border: "1px solid rgba(242,193,78,0.4)" } },
+                    React.createElement("div", { className: "text-[11px]", style: { color: "rgba(255,255,255,0.9)" } },
+                        React.createElement("span", { className: "font-bold" }, fmtDate(pendingSnapshot.snapshot_date)),
+                        " upload is ready but hasn't posted a DSO point yet \u2014 update Avg. Monthly Credit Sales above first if needed, then post."),
+                    canEdit && (React.createElement("button", { className: "btn !py-1 !px-2 !text-xs !font-bold flex-shrink-0", style: { background: "#f2c14e", color: "#3a2f13" }, onClick: postDso, disabled: postingDso || !avgMonthlySales }, postingDso ? "Posting…" : `Post DSO (${Math.round((Number(pendingSnapshot.total_ar || 0) / (avgMonthlySales || 1)) * daysInPeriod)}d)`)))),
                 React.createElement("div", { className: "mt-2 pt-2", style: { borderTop: "1px solid rgba(255,255,255,0.15)" } },
                     React.createElement("div", { className: "flex items-center justify-between mb-1" },
                         React.createElement("div", { className: "text-[10px] uppercase tracking-widest font-semibold", style: { color: "rgba(255,255,255,0.6)" } }, "DSO Over Time"),
