@@ -495,6 +495,7 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
     // Detect "big payments" — invoices that just disappeared (paid off or
     // written off) whose balance was more than 3% of last week's total AR.
     const priorTotalAR = before.reduce((s, r) => s + Number(r.open_balance || 0), 0);
+    let bigPaymentsError = null;
     if (toRemove.length && priorTotalAR > 0) {
         const removedSet = new Set(toRemove);
         const bigPayments = before
@@ -511,7 +512,11 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
         })
             .filter(p => p.pct_of_prior_ar > 3);
         if (bigPayments.length) {
-            await db.from('big_payments_log').insert(bigPayments);
+            const { error } = await db.from('big_payments_log').insert(bigPayments);
+            if (error) {
+                console.error("big_payments_log insert failed:", error);
+                bigPaymentsError = error.message;
+            }
         }
     }
     const CHUNK = 300;
@@ -569,16 +574,21 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
     return {
         total: rows.length, added: addedCount, removed: toRemove.length, totalAR,
         snapshotError: snapshotError ? snapshotError.message : null,
+        bigPaymentsError,
     };
 }
 function UploadButton({ profile, onDone }) {
     const fileRef = useRef(null);
     const [busy, setBusy] = useState(false);
     const [msg, setMsg] = useState(null);
+    const inFlight = useRef(false);
     async function handleFile(e) {
+        if (inFlight.current)
+            return; // guards against any re-entrant/duplicate firing of this handler
         const file = e.target.files[0];
         if (!file)
             return;
+        inFlight.current = true;
         setBusy(true);
         setMsg(null);
         try {
@@ -588,7 +598,8 @@ function UploadButton({ profile, onDone }) {
             const label = new Date().toISOString().slice(0, 10);
             const result = await syncInvoices(parsed.invoices, profile.display_name, label, parsed.reportDate);
             const warning = result.snapshotError ? ` ⚠️ Weekly snapshot didn't save (${result.snapshotError}) — DSO tracking may be missing this week.` : "";
-            setMsg({ ok: true, text: `Synced ${result.total} invoices (${fmtMoney(result.totalAR)} total) — ${result.added} new, ${result.removed} removed (paid/written off).${warning}` });
+            const warning2 = result.bigPaymentsError ? ` ⚠️ Big Payments log didn't save (${result.bigPaymentsError}).` : "";
+            setMsg({ ok: true, text: `Synced ${result.total} invoices (${fmtMoney(result.totalAR)} total) — ${result.added} new, ${result.removed} removed (paid/written off).${warning}${warning2}` });
             onDone();
         }
         catch (err) {
@@ -597,6 +608,7 @@ function UploadButton({ profile, onDone }) {
         }
         finally {
             setBusy(false);
+            inFlight.current = false;
             if (fileRef.current)
                 fileRef.current.value = "";
         }
@@ -768,6 +780,25 @@ const BUCKET_META = {
     b76: { label: "76+ Days", color: "var(--neon-pink)", chip: "age-chip-danger", tint: "glass-terracotta" },
 };
 const CUSTOMER_PALETTE = ["#3f6e6b", "#a8503a", "#a8791f", "#4f7a45", "#8a6fa8"];
+function smoothLinePath(pts) {
+    if (pts.length === 0)
+        return "";
+    if (pts.length === 1)
+        return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+    let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] || pts[i];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2] || p2;
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = p1.y + (p2.y - p0.y) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = p2.y - (p3.y - p1.y) / 6;
+        d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+    }
+    return d;
+}
 function DSOTrendChart({ history }) {
     const TARGET_DSO = 55;
     const Y_MIN = 30, Y_MAX = 100;
@@ -783,18 +814,24 @@ function DSOTrendChart({ history }) {
     const points = hasData ? history.map((h, i) => {
         const x = history.length === 1 ? padLeft + plotW / 2 : padLeft + (i / (history.length - 1)) * plotW;
         const clamped = Math.max(Y_MIN, Math.min(Y_MAX, Number(h.dso)));
-        return { x, y: yForValue(clamped), date: h.snapshot_date, value: Number(h.dso) };
+        return { x, y: yForValue(clamped), date: h.point_date, value: Number(h.dso) };
     }) : [];
-    const linePath = points.map((p, i) => (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
+    const linePath = smoothLinePath(points);
     const areaPath = points.length > 1
         ? linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`
         : "";
+    const lastPoint = points[points.length - 1];
     return (React.createElement("div", { className: "relative" },
         React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "170px" } },
             React.createElement("defs", null,
                 React.createElement("linearGradient", { id: "dsoFill", x1: "0", y1: "0", x2: "0", y2: "1" },
-                    React.createElement("stop", { offset: "0%", stopColor: ACCENT, stopOpacity: "0.35" }),
-                    React.createElement("stop", { offset: "100%", stopColor: ACCENT, stopOpacity: "0" }))),
+                    React.createElement("stop", { offset: "0%", stopColor: ACCENT, stopOpacity: "0.4" }),
+                    React.createElement("stop", { offset: "100%", stopColor: ACCENT, stopOpacity: "0" })),
+                React.createElement("filter", { id: "dsoGlow", x: "-40%", y: "-40%", width: "180%", height: "180%" },
+                    React.createElement("feGaussianBlur", { stdDeviation: "2.2", result: "blur" }),
+                    React.createElement("feMerge", null,
+                        React.createElement("feMergeNode", { in: "blur" }),
+                        React.createElement("feMergeNode", { in: "SourceGraphic" })))),
             gridValues.map(v => {
                 const y = yForValue(v);
                 return (React.createElement("g", { key: v },
@@ -809,14 +846,17 @@ function DSOTrendChart({ history }) {
                 "d"),
             points.length > 1 && (React.createElement(React.Fragment, null,
                 React.createElement("path", { d: areaPath, fill: "url(#dsoFill)" }),
-                React.createElement("path", { d: linePath, fill: "none", stroke: ACCENT, strokeWidth: "2.5", strokeLinejoin: "round", strokeLinecap: "round" }))),
+                React.createElement("path", { d: linePath, fill: "none", stroke: ACCENT, strokeWidth: "2.5", strokeLinejoin: "round", strokeLinecap: "round", filter: "url(#dsoGlow)" }))),
             points.map((p, i) => (React.createElement("g", { key: i },
                 React.createElement("circle", { cx: p.x, cy: p.y, r: "4", fill: ACCENT, stroke: "#4a3b63", strokeWidth: "1.5" }),
                 React.createElement("text", { x: p.x, y: p.y - 10, textAnchor: "middle", fontSize: "10", fontWeight: "700", fill: "#fff" }, Math.round(p.value)),
-                React.createElement("text", { x: p.x, y: H - 8, textAnchor: "middle", fontSize: "9", fill: "rgba(255,255,255,0.75)" }, fmtDate(p.date)))))),
+                React.createElement("text", { x: p.x, y: H - 8, textAnchor: "middle", fontSize: "9", fill: "rgba(255,255,255,0.75)" }, fmtDate(p.date))))),
+            lastPoint && (React.createElement("circle", { cx: lastPoint.x, cy: lastPoint.y, r: "4", fill: "none", stroke: ACCENT, strokeWidth: "2" },
+                React.createElement("animate", { attributeName: "r", values: "4;11;4", dur: "2.2s", repeatCount: "indefinite" }),
+                React.createElement("animate", { attributeName: "opacity", values: "0.9;0;0.9", dur: "2.2s", repeatCount: "indefinite" })))),
         !hasData && (React.createElement("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none" },
             React.createElement("p", { className: "text-xs px-3 py-1 rounded-full", style: { color: "rgba(255,255,255,0.85)", background: "rgba(0,0,0,0.25)" } }, "No DSO data in this time period yet."))),
-        points.length === 1 && (React.createElement("p", { className: "text-center text-xs", style: { color: "rgba(255,255,255,0.75)" } }, "First week tracked \u2014 upload next week's report to start seeing the trend."))));
+        points.length === 1 && (React.createElement("p", { className: "text-center text-xs", style: { color: "rgba(255,255,255,0.75)" } }, "First point plotted \u2014 plot next week's to start seeing the trend."))));
 }
 function AROver60Meter({ pct, balance }) {
     const TARGET = 15;
@@ -1104,40 +1144,49 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices, c
 function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
     const [priorSnapshot, setPriorSnapshot] = useState(null); // { band_0_45, band_46_75, band_76_plus, total_ar, customer_totals } | null
     const [avgMonthlySales, setAvgMonthlySales] = useState(null); // null while loading
-    const [editingSales, setEditingSales] = useState(false);
+    const [daysInPeriod, setDaysInPeriod] = useState(null); // null while loading — now user-editable, not auto-calculated
+    const [editingAssumptions, setEditingAssumptions] = useState(false);
     const [salesInput, setSalesInput] = useState("");
-    const [savingSales, setSavingSales] = useState(false);
+    const [daysInput, setDaysInput] = useState("");
+    const [savingAssumptions, setSavingAssumptions] = useState(false);
     useEffect(() => {
         let cancelled = false;
         async function loadSettings() {
             const { data, error } = await db.from('company_settings').select('*').eq('id', 1).single();
             if (!cancelled && !error && data) {
                 setAvgMonthlySales(Number(data.avg_monthly_sales || 1200000));
+                setDaysInPeriod(Number(data.dso_days_in_period || daysInMostRecentCompletedMonth()));
             }
             else if (!cancelled) {
-                setAvgMonthlySales(1200000); // fallback if the settings row/table isn't set up yet
+                // fallback if the settings row/table isn't set up yet
+                setAvgMonthlySales(1200000);
+                setDaysInPeriod(daysInMostRecentCompletedMonth());
             }
         }
         loadSettings();
         return () => { cancelled = true; };
     }, []);
-    function startEditingSales() {
+    function startEditingAssumptions() {
         setSalesInput(String(avgMonthlySales));
-        setEditingSales(true);
+        setDaysInput(String(daysInPeriod));
+        setEditingAssumptions(true);
     }
-    async function saveSales() {
-        const val = parseMoney(salesInput);
-        if (val <= 0)
+    async function saveAssumptions() {
+        const salesVal = parseMoney(salesInput);
+        const daysVal = parseInt(daysInput, 10);
+        if (salesVal <= 0 || !daysVal || daysVal <= 0)
             return;
-        setSavingSales(true);
+        setSavingAssumptions(true);
         const { error } = await db.from('company_settings').upsert({
-            id: 1, avg_monthly_sales: val, updated_at: new Date().toISOString(),
+            id: 1, avg_monthly_sales: salesVal, dso_days_in_period: daysVal, updated_at: new Date().toISOString(),
             updated_by: profile ? profile.display_name : null,
         });
-        if (!error)
-            setAvgMonthlySales(val);
-        setSavingSales(false);
-        setEditingSales(false);
+        if (!error) {
+            setAvgMonthlySales(salesVal);
+            setDaysInPeriod(daysVal);
+        }
+        setSavingAssumptions(false);
+        setEditingAssumptions(false);
     }
     useEffect(() => {
         let cancelled = false;
@@ -1154,31 +1203,52 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         loadPriorSnapshot();
         return () => { cancelled = true; };
     }, [invoices]);
-    const [dsoHistory, setDsoHistory] = useState([]); // [{ snapshot_date, dso }] chronological, posted only
-    const [pendingSnapshot, setPendingSnapshot] = useState(null); // { id, snapshot_date, total_ar } | null — most recent upload awaiting a DSO post
+    // DSO points are plotted manually — decoupled from upload timing, so any
+    // date (including backfilling past reports) can be added deliberately
+    // rather than being auto-created at upload time.
+    const [dsoHistory, setDsoHistory] = useState([]); // [{ point_date, dso }] chronological
+    const [plotDate, setPlotDate] = useState("");
+    const [plotDsoInput, setPlotDsoInput] = useState("");
     const [postingDso, setPostingDso] = useState(false);
+    const [plotOpen, setPlotOpen] = useState(false);
     const reloadDsoData = useCallback(async () => {
-        const { data, error } = await db.from('weekly_snapshots')
-            .select('id, snapshot_date, dso, total_ar')
-            .order('snapshot_date', { ascending: true })
-            .order('created_at', { ascending: true });
-        if (!error && data) {
-            setDsoHistory(data.filter(d => d.dso != null));
-            const pending = [...data].reverse().find(d => d.dso == null) || null;
-            setPendingSnapshot(pending);
-        }
+        const { data, error } = await db.from('dso_points')
+            .select('point_date, dso')
+            .order('point_date', { ascending: true });
+        if (!error && data)
+            setDsoHistory(data);
     }, []);
-    useEffect(() => {
-        reloadDsoData();
-    }, [invoices, reloadDsoData]);
-    async function postDso() {
-        if (!pendingSnapshot || !avgMonthlySales)
+    useEffect(() => { reloadDsoData(); }, [reloadDsoData]);
+    const reportAsOfDate = useMemo(() => {
+        if (invoices.length === 0)
+            return null;
+        return invoices.reduce((max, inv) => {
+            const d = inv.report_as_of_date || inv.last_seen_upload;
+            return d > max ? d : max;
+        }, invoices[0].report_as_of_date || invoices[0].last_seen_upload || "");
+    }, [invoices]);
+    function openPlotForm() {
+        setPlotDate(reportAsOfDate || new Date().toISOString().slice(0, 10));
+        setPlotDsoInput(dso != null ? dso.toFixed(1) : "");
+        setPlotOpen(true);
+    }
+    async function submitPlot() {
+        const dsoVal = parseFloat(plotDsoInput);
+        if (!plotDate || isNaN(dsoVal))
             return;
         setPostingDso(true);
-        const computed = (Number(pendingSnapshot.total_ar || 0) / avgMonthlySales) * daysInPeriod;
-        const { error } = await db.from('weekly_snapshots').update({ dso: computed }).eq('id', pendingSnapshot.id);
-        if (!error)
+        const { error } = await db.from('dso_points').upsert({
+            point_date: plotDate,
+            dso: dsoVal,
+            total_ar: grandTotals.total,
+            avg_monthly_sales: avgMonthlySales,
+            days_in_period: daysInPeriod,
+            posted_by: profile ? profile.display_name : null,
+        }, { onConflict: 'point_date' });
+        if (!error) {
             await reloadDsoData();
+            setPlotOpen(false);
+        }
         setPostingDso(false);
     }
     const [dsoPeriod, setDsoPeriod] = useState("all"); // 'all' | '1' | '3' | '6' (months)
@@ -1188,7 +1258,7 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         const months = parseInt(dsoPeriod, 10);
         const now = new Date();
         const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
-        return dsoHistory.filter(h => new Date(h.snapshot_date + "T00:00:00") >= cutoff);
+        return dsoHistory.filter(h => new Date(h.point_date + "T00:00:00") >= cutoff);
     }, [dsoHistory, dsoPeriod]);
     const priorTotals = useMemo(() => {
         if (!priorSnapshot)
@@ -1260,9 +1330,8 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         });
         return t;
     }, [invoices]);
-    const daysInPeriod = useMemo(() => daysInMostRecentCompletedMonth(), []);
     const dso = useMemo(() => {
-        if (!avgMonthlySales || avgMonthlySales <= 0)
+        if (!avgMonthlySales || avgMonthlySales <= 0 || !daysInPeriod)
             return null;
         return (grandTotals.total / avgMonthlySales) * daysInPeriod;
     }, [grandTotals.total, avgMonthlySales, daysInPeriod]);
@@ -1289,28 +1358,41 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             React.createElement("span", { className: "text-3xl font-extrabold text-white", style: { textShadow: "0 2px 8px rgba(0,0,0,0.3)" } }, dso != null ? Math.round(dso) : "—"),
                             React.createElement("span", { className: "text-sm font-semibold", style: { color: "rgba(255,255,255,0.75)" } }, "days")),
                         React.createElement("div", { className: "text-[10px] mt-0.5", style: { color: "rgba(255,255,255,0.6)" } },
-                            "(",
                             fmtMoney(grandTotals.total),
-                            " total AR \u00F7 ",
+                            " total AR (auto) \u00F7 ",
                             avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…",
-                            " avg. monthly credit sales) \u00D7 ",
-                            daysInPeriod,
+                            " avg. monthly sales \u00D7 ",
+                            daysInPeriod != null ? daysInPeriod : "…",
                             " days")),
-                    React.createElement("div", { className: "text-right" },
-                        React.createElement("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: "rgba(255,255,255,0.65)" } }, "Avg. Monthly Credit Sales"),
-                        editingSales ? (React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("input", { className: "input w-32 text-right", value: salesInput, onChange: e => setSalesInput(e.target.value), autoFocus: true, onKeyDown: e => { if (e.key === 'Enter')
-                                    saveSales(); if (e.key === 'Escape')
-                                    setEditingSales(false); } }),
-                            React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", onClick: saveSales, disabled: savingSales }, savingSales ? "…" : "Save"),
-                            React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: () => setEditingSales(false) }, "Cancel"))) : (React.createElement("div", { className: "flex items-center gap-2 justify-end" },
-                            React.createElement("span", { className: "font-bold text-white text-sm" }, avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…"),
-                            canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: startEditingSales }, "Edit")))))),
-                pendingSnapshot && (React.createElement("div", { className: "mb-3 p-2.5 rounded-lg flex items-center justify-between flex-wrap gap-2", style: { background: "rgba(242,193,78,0.15)", border: "1px solid rgba(242,193,78,0.4)" } },
-                    React.createElement("div", { className: "text-[11px]", style: { color: "rgba(255,255,255,0.9)" } },
-                        React.createElement("span", { className: "font-bold" }, fmtDate(pendingSnapshot.snapshot_date)),
-                        " upload is ready but hasn't posted a DSO point yet \u2014 update Avg. Monthly Credit Sales above first if needed, then post."),
-                    canEdit && (React.createElement("button", { className: "btn !py-1 !px-2 !text-xs !font-bold flex-shrink-0", style: { background: "#f2c14e", color: "#3a2f13" }, onClick: postDso, disabled: postingDso || !avgMonthlySales }, postingDso ? "Posting…" : `Post DSO (${Math.round((Number(pendingSnapshot.total_ar || 0) / (avgMonthlySales || 1)) * daysInPeriod)}d)`)))),
+                    React.createElement("div", { className: "text-right" }, editingAssumptions ? (React.createElement("div", { className: "flex flex-col items-end gap-1.5" },
+                        React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
+                            "Avg. Monthly Sales",
+                            React.createElement("input", { className: "input w-28 text-right !py-1", value: salesInput, onChange: e => setSalesInput(e.target.value), autoFocus: true })),
+                        React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
+                            "Days in Period",
+                            React.createElement("input", { className: "input w-28 text-right !py-1", value: daysInput, onChange: e => setDaysInput(e.target.value), onKeyDown: e => { if (e.key === 'Enter')
+                                    saveAssumptions(); if (e.key === 'Escape')
+                                    setEditingAssumptions(false); } })),
+                        React.createElement("div", { className: "flex gap-2 mt-0.5" },
+                            React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", onClick: saveAssumptions, disabled: savingAssumptions }, savingAssumptions ? "…" : "Save"),
+                            React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: () => setEditingAssumptions(false) }, "Cancel")))) : (React.createElement("div", { className: "flex flex-col items-end gap-0.5" },
+                        React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
+                            "Avg. Sales: ",
+                            React.createElement("span", { className: "font-bold text-white" }, avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…")),
+                        React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
+                            "Days: ",
+                            React.createElement("span", { className: "font-bold text-white" }, daysInPeriod != null ? daysInPeriod : "…")),
+                        canEdit && (React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs mt-1", onClick: startEditingAssumptions }, "Edit")))))),
+                canEdit && (plotOpen ? (React.createElement("div", { className: "mb-3 p-2.5 rounded-lg flex items-end flex-wrap gap-2", style: { background: "rgba(242,193,78,0.15)", border: "1px solid rgba(242,193,78,0.4)" } },
+                    React.createElement("label", { className: "flex flex-col gap-1 text-[10px]", style: { color: "rgba(255,255,255,0.8)" } },
+                        "AR Date",
+                        React.createElement("input", { type: "date", className: "input !py-1 !text-xs", value: plotDate, onChange: e => setPlotDate(e.target.value) })),
+                    React.createElement("label", { className: "flex flex-col gap-1 text-[10px]", style: { color: "rgba(255,255,255,0.8)" } },
+                        "DSO (days)",
+                        React.createElement("input", { className: "input !py-1 !text-xs w-20", value: plotDsoInput, onChange: e => setPlotDsoInput(e.target.value) })),
+                    React.createElement("button", { className: "btn !py-1.5 !px-3 !text-xs !font-bold", style: { background: "#f2c14e", color: "#3a2f13" }, onClick: submitPlot, disabled: postingDso }, postingDso ? "Plotting…" : "📍 Plot Point"),
+                    React.createElement("button", { className: "btn btn-ghost !py-1.5 !px-2 !text-xs", onClick: () => setPlotOpen(false) }, "Cancel"))) : (React.createElement("div", { className: "mb-3" },
+                    React.createElement("button", { className: "btn !py-1.5 !px-3 !text-xs !font-bold", style: { background: "#f2c14e", color: "#3a2f13" }, onClick: openPlotForm }, "\uD83D\uDCCD Plot DSO Point")))),
                 React.createElement("div", { className: "mt-2 pt-2", style: { borderTop: "1px solid rgba(255,255,255,0.15)" } },
                     React.createElement("div", { className: "flex items-center justify-between mb-1" },
                         React.createElement("div", { className: "text-[10px] uppercase tracking-widest font-semibold", style: { color: "rgba(255,255,255,0.6)" } }, "DSO Over Time"),
