@@ -923,28 +923,21 @@ function AROver60Meter({ pct, balance }) {
                 "%"))));
 }
 function ComparisonBarRow({ label, value, share, priorValue, priorShare, color }) {
-    const hasPrior = priorValue != null;
-    const delta = hasPrior ? value - priorValue : null;
-    const deltaPct = hasPrior && priorValue > 0 ? Math.round(Math.abs(delta) / priorValue * 100) : null;
     return (React.createElement("div", { className: "mb-4 last:mb-0" },
         React.createElement("div", { className: "flex items-center justify-between text-xs mb-1 gap-2" },
             React.createElement("span", { className: "text-stone-600 font-medium truncate" }, label),
-            React.createElement("span", { className: "text-stone-500 flex-shrink-0 flex items-center gap-1.5" },
+            React.createElement("span", { className: "text-stone-500 flex-shrink-0" },
                 fmtMoney(value),
                 " \u00B7 ",
                 Math.round(share),
-                "%",
-                hasPrior && Math.abs(delta) > 0.5 && (React.createElement("span", { className: delta > 0 ? "text-red-600 font-semibold" : "text-emerald-700 font-semibold" },
-                    delta > 0 ? "▲" : "▼",
-                    " ",
-                    deltaPct != null ? deltaPct + "%" : fmtMoney(Math.abs(delta)))))),
+                "%")),
         React.createElement("div", { className: "w-full h-3 rounded-full bg-stone-200/80 overflow-hidden mb-1" },
             React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
 }
 function AgingBandChart({ grandTotals, priorTotals }) {
     return (React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
         React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-1" }, "Total A/R by Aging Band"),
-        React.createElement("p", { className: "text-[11px] text-stone-500 mb-3" }, priorTotals ? "vs. last week" : "Upload next week's report to see week-over-week change"),
+        React.createElement("p", { className: "text-[11px] text-stone-500 mb-3" }, "This week's totals"),
         ["b0", "b46", "b76"].map(key => {
             const meta = BUCKET_META[key];
             const share = grandTotals.total > 0 ? (grandTotals[key] / grandTotals.total * 100) : 0;
@@ -967,7 +960,7 @@ function TopCustomersChart({ byCustomer, grandTotal, priorByCustomer, priorGrand
     }, [priorMap, top5]);
     return (React.createElement("div", { className: "glass glass-lavender rounded-xl p-4" },
         React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-1" }, "Total A/R \u2014 Top 5 Customers vs. All Others"),
-        React.createElement("p", { className: "text-[11px] text-stone-500 mb-3" }, priorMap ? "vs. last week" : "Upload next week's report to see week-over-week change"),
+        React.createElement("p", { className: "text-[11px] text-stone-500 mb-3" }, "This week's totals"),
         top5.map((c, i) => {
             var _a, _b;
             const share = grandTotal > 0 ? (c.total / grandTotal * 100) : 0;
@@ -1369,12 +1362,12 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             fmtMoney(grandTotals.total),
                             " total AR (auto) \u00F7 ",
                             avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…",
-                            " avg. monthly sales \u00D7 ",
+                            " most recent month's billed revenue \u00D7 ",
                             daysInPeriod != null ? daysInPeriod : "…",
                             " days")),
                     React.createElement("div", { className: "text-right" }, editingAssumptions ? (React.createElement("div", { className: "flex flex-col items-end gap-1.5" },
                         React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
-                            "Avg. Monthly Sales",
+                            "Most Recent Month's Billed Revenue",
                             React.createElement("input", { className: "input w-28 text-right !py-1", value: salesInput, onChange: e => setSalesInput(e.target.value), autoFocus: true })),
                         React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
                             "Days in Period",
@@ -1385,7 +1378,7 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", onClick: saveAssumptions, disabled: savingAssumptions }, savingAssumptions ? "…" : "Save"),
                             React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: () => setEditingAssumptions(false) }, "Cancel")))) : (React.createElement("div", { className: "flex flex-col items-end gap-0.5" },
                         React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
-                            "Avg. Sales: ",
+                            "Billed Revenue: ",
                             React.createElement("span", { className: "font-bold text-white" }, avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…")),
                         React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
                             "Days: ",
