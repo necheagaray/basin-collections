@@ -503,7 +503,7 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
     const toRemove = [...beforeSet].filter(d => !afterSet.has(d));
     const addedCount = [...afterSet].filter(d => !beforeSet.has(d)).length;
     // Detect "big payments" — invoices that just disappeared (paid off or
-    // written off) whose balance was more than 3% of last week's total AR.
+    // written off) whose balance was more than 1% of last week's total AR.
     const priorTotalAR = before.reduce((s, r) => s + Number(r.open_balance || 0), 0);
     let bigPaymentsError = null;
     if (toRemove.length && priorTotalAR > 0) {
@@ -520,7 +520,7 @@ async function syncInvoices(parsedInvoices, uploaderName, uploadLabel, reportDat
                 pct_of_prior_ar: (Number(r.open_balance || 0) / priorTotalAR) * 100,
             });
         })
-            .filter(p => p.pct_of_prior_ar > 3);
+            .filter(p => p.pct_of_prior_ar > 1);
         if (bigPayments.length) {
             const { error } = await db.from('big_payments_log').insert(bigPayments);
             if (error) {
@@ -924,17 +924,52 @@ function AROver60Meter({ pct, balance }) {
 }
 function ComparisonBarRow({ label, value, share, priorValue, priorShare, color }) {
     return (React.createElement("div", { className: "mb-4 last:mb-0" },
-        React.createElement("div", { className: "flex items-center justify-between text-xs mb-1 gap-2" },
-            React.createElement("span", { className: "text-stone-600 font-medium truncate" }, label),
-            React.createElement("span", { className: "text-stone-500 flex-shrink-0" },
-                fmtMoney(value),
-                " \u00B7 ",
-                Math.round(share),
-                "%")),
+        React.createElement("div", { className: "flex items-center justify-between mb-1.5 gap-2" },
+            React.createElement("span", { className: "text-xs text-stone-600 font-semibold truncate" }, label),
+            React.createElement("div", { className: "flex items-center gap-2 flex-shrink-0" },
+                React.createElement("span", { className: "text-base font-extrabold tabular-nums", style: { color: color, textShadow: "0 1px 0 rgba(255,255,255,0.5)" } }, fmtMoney(value)),
+                React.createElement("span", { className: "text-xs font-extrabold px-2 py-0.5 rounded-full", style: { background: "color-mix(in srgb, " + color + " 18%, white)", color: color } }, Math.round(share) + "%"))),
         React.createElement("div", { className: "w-full h-3 rounded-full bg-stone-200/80 overflow-hidden mb-1" },
             React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
 }
-function AgingBandChart({ grandTotals, priorTotals }) {
+function Aging76TrendChart({ history }) {
+    const W = 640, H = 90;
+    const padTop = 8, padBottom = 16, padLeft = 8, padRight = 8;
+    const plotW = W - padLeft - padRight;
+    const plotH = H - padTop - padBottom;
+    const hasData = history && history.length > 0;
+    if (!hasData) {
+        return React.createElement("p", { className: "text-[10px] text-stone-400 text-center py-3" }, "No 76+ balance history plotted yet.");
+    }
+    const values = history.map(h => Number(h.balance));
+    const rawMin = Math.min(...values, 0);
+    const rawMax = Math.max(...values);
+    const pad = (rawMax - rawMin) * 0.15 || rawMax * 0.1 || 1000;
+    const minV = Math.max(0, rawMin - pad);
+    const maxV = rawMax + pad;
+    const range = (maxV - minV) || 1;
+    const yForValue = v => padTop + plotH - ((v - minV) / range) * plotH;
+    const points = history.map((h, i) => {
+        const x = history.length === 1 ? padLeft + plotW / 2 : padLeft + (i / (history.length - 1)) * plotW;
+        return { x, y: yForValue(Number(h.balance)), date: h.point_date, value: Number(h.balance) };
+    });
+    const linePath = smoothLinePath(points);
+    const areaPath = points.length > 1
+        ? linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`
+        : "";
+    return (React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "90px", opacity: 0.7 } },
+        React.createElement("defs", null,
+            React.createElement("linearGradient", { id: "aging76Fill", x1: "0", y1: "0", x2: "0", y2: "1" },
+                React.createElement("stop", { offset: "0%", stopColor: "var(--neon-pink)", stopOpacity: "0.3" }),
+                React.createElement("stop", { offset: "100%", stopColor: "var(--neon-pink)", stopOpacity: "0" }))),
+        points.length > 1 && (React.createElement(React.Fragment, null,
+            React.createElement("path", { d: areaPath, fill: "url(#aging76Fill)" }),
+            React.createElement("path", { d: linePath, fill: "none", stroke: "var(--neon-pink)", strokeWidth: "1.5", strokeLinejoin: "round", strokeLinecap: "round", opacity: 0.55 }))),
+        points.map((p, i) => (React.createElement("g", { key: i },
+            React.createElement("circle", { cx: p.x, cy: p.y, r: 2.5, fill: "var(--neon-pink)", opacity: 0.65 }),
+            React.createElement("text", { x: p.x, y: H - 4, textAnchor: "middle", fontSize: "8", fill: "#8a7a6a" }, fmtDate(p.date)))))));
+}
+function AgingBandChart({ grandTotals, priorTotals, aging76History, dsoPeriod, setDsoPeriod, canEdit, plotAging76Open, setPlotAging76Open, plotAging76Date, setPlotAging76Date, plotAging76Input, setPlotAging76Input, postingAging76, openPlotAging76Form, submitPlotAging76 }) {
     return (React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
         React.createElement("h3", { className: "text-xs uppercase tracking-wide text-stone-500 mb-1" }, "Total A/R by Aging Band"),
         React.createElement("p", { className: "text-[11px] text-stone-500 mb-3" }, "This week's totals"),
@@ -944,7 +979,25 @@ function AgingBandChart({ grandTotals, priorTotals }) {
             const priorValue = priorTotals ? priorTotals[key] : null;
             const priorShare = priorTotals && priorTotals.total > 0 ? (priorTotals[key] / priorTotals.total * 100) : 0;
             return React.createElement(ComparisonBarRow, { key: key, label: meta.label, value: grandTotals[key], share: share, priorValue: priorValue, priorShare: priorShare, color: meta.color });
-        })));
+        }),
+        React.createElement("div", { className: "mt-3 pt-3 border-t border-stone-300/60" },
+            React.createElement("div", { className: "flex items-center justify-between mb-1" },
+                React.createElement("div", { className: "text-[10px] uppercase tracking-widest font-semibold text-stone-500" }, "76+ Days Over Time"),
+                React.createElement("select", { className: "input !py-0.5 !px-2 !text-[11px]", value: dsoPeriod, onChange: e => setDsoPeriod(e.target.value) },
+                    React.createElement("option", { value: "all" }, "All Time"),
+                    React.createElement("option", { value: "1" }, "Past Month"),
+                    React.createElement("option", { value: "3" }, "Past 3 Months"),
+                    React.createElement("option", { value: "6" }, "Past 6 Months"))),
+            React.createElement(Aging76TrendChart, { history: aging76History }),
+            canEdit && (plotAging76Open ? (React.createElement("div", { className: "mt-2 p-2 rounded-lg flex items-end flex-wrap gap-2 bg-stone-900/5 border border-stone-300" },
+                React.createElement("label", { className: "flex flex-col gap-1 text-[10px] text-stone-600" },
+                    "AR Date",
+                    React.createElement("input", { type: "date", className: "input !py-1 !text-xs", value: plotAging76Date, onChange: e => setPlotAging76Date(e.target.value) })),
+                React.createElement("label", { className: "flex flex-col gap-1 text-[10px] text-stone-600" },
+                    "76+ Balance ($)",
+                    React.createElement("input", { className: "input !py-1 !text-xs w-28", value: plotAging76Input, onChange: e => setPlotAging76Input(e.target.value) })),
+                React.createElement("button", { className: "btn !py-1.5 !px-3 !text-xs !font-bold", style: { background: "var(--neon-pink)", color: "#fff" }, onClick: submitPlotAging76, disabled: postingAging76 }, postingAging76 ? "Plotting\u2026" : "\uD83D\uDCCD Plot Point"),
+                React.createElement("button", { className: "btn btn-ghost !py-1.5 !px-2 !text-xs", onClick: () => setPlotAging76Open(false) }, "Cancel"))) : (React.createElement("button", { className: "btn !py-1 !px-2 !text-xs !font-bold mt-2", style: { background: "var(--neon-pink)", color: "#fff" }, onClick: openPlotAging76Form }, "\uD83D\uDCCD Plot 76+ Point"))))));
 }
 function TopCustomersChart({ byCustomer, grandTotal, priorByCustomer, priorGrandTotal }) {
     const sorted = useMemo(() => [...byCustomer].sort((a, b) => b.total - a.total), [byCustomer]);
@@ -1001,7 +1054,7 @@ function BigPaymentsModal({ onClose, onOpenCustomer }) {
             React.createElement("div", { className: "flex items-start justify-between mb-3 flex-shrink-0" },
                 React.createElement("div", null,
                     React.createElement("h2", { className: "text-lg font-bold text-stone-800" }, "\uD83D\uDCB0 Big Payments"),
-                    React.createElement("p", { className: "text-[11px] text-stone-500 mt-0.5" }, "Invoices over 3% of the prior week's total AR that dropped off the aging report")),
+                    React.createElement("p", { className: "text-[11px] text-stone-500 mt-0.5" }, "Invoices over 1% of the prior week's total AR that dropped off the aging report")),
                 React.createElement("button", { onClick: onClose, className: "btn btn-ghost !px-2 !py-1 flex-shrink-0" }, "\u2715")),
             loading ? (React.createElement("div", { className: "text-center text-stone-500 py-10" }, "Loading\u2026")) : payments.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-10 text-sm" }, "No big payments detected yet \u2014 this fills in after your next weekly upload finds a match.")) : (React.createElement("div", { className: "space-y-2 overflow-y-auto pr-1 flex-1 min-h-0" }, payments.map(p => (React.createElement("div", { key: p.id, className: "border border-stone-300/60 rounded-xl p-3 hover:border-amber-500 cursor-pointer transition", onClick: () => onOpenCustomer(p.customer_name) },
                 React.createElement("div", { className: "flex items-center justify-between gap-2" },
@@ -1142,7 +1195,7 @@ function CustomerNotesModal({ customerName, invoices, onClose, onGoToInvoices, c
                         canEdit && (React.createElement("button", { onClick: () => handleDelete(n.id, inv.id), disabled: deletingId === n.id, title: "Delete note", className: "text-stone-400 hover:text-red-500 transition text-xs leading-none flex-shrink-0" }, deletingId === n.id ? "…" : "🗑")))))))));
             }))))));
 }
-function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
+function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile, onRefresh }) {
     const [priorSnapshot, setPriorSnapshot] = useState(null); // { band_0_45, band_46_75, band_76_plus, total_ar, customer_totals } | null
     const [avgMonthlySales, setAvgMonthlySales] = useState(null); // null while loading
     const [daysInPeriod, setDaysInPeriod] = useState(null); // null while loading — now user-editable, not auto-calculated
@@ -1252,7 +1305,7 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         }
         setPostingDso(false);
     }
-    const [dsoPeriod, setDsoPeriod] = useState("all"); // 'all' | '1' | '3' | '6' (months)
+    const [dsoPeriod, setDsoPeriod] = useState("all"); // 'all' | '1' | '3' | '6' (months) — shared by DSO and 76+ charts
     const filteredDsoHistory = useMemo(() => {
         if (dsoPeriod === "all")
             return dsoHistory;
@@ -1261,6 +1314,52 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
         return dsoHistory.filter(h => new Date(h.point_date + "T00:00:00") >= cutoff);
     }, [dsoHistory, dsoPeriod]);
+
+    // 76+ Days Over Time — same manual-plot pattern as DSO, and shares
+    // dsoPeriod so both charts always show the same time window.
+    const [aging76History, setAging76History] = useState([]);
+    const [plotAging76Date, setPlotAging76Date] = useState("");
+    const [plotAging76Input, setPlotAging76Input] = useState("");
+    const [postingAging76, setPostingAging76] = useState(false);
+    const [plotAging76Open, setPlotAging76Open] = useState(false);
+    const reloadAging76Data = useCallback(async () => {
+        const { data, error } = await db.from('aging76_points')
+            .select('point_date, balance')
+            .order('point_date', { ascending: true });
+        if (!error && data)
+            setAging76History(data);
+    }, []);
+    useEffect(() => { reloadAging76Data(); }, [reloadAging76Data]);
+    function openPlotAging76Form() {
+        setPlotAging76Date(reportAsOfDate || new Date().toISOString().slice(0, 10));
+        setPlotAging76Input(grandTotals.b76 != null ? String(Math.round(grandTotals.b76)) : "");
+        setPlotAging76Open(true);
+    }
+    async function submitPlotAging76() {
+        const val = parseFloat(plotAging76Input);
+        if (!plotAging76Date || isNaN(val))
+            return;
+        setPostingAging76(true);
+        const { error } = await db.from('aging76_points').upsert({
+            point_date: plotAging76Date,
+            balance: val,
+            posted_by: profile ? profile.display_name : null,
+        }, { onConflict: 'point_date' });
+        if (!error) {
+            await reloadAging76Data();
+            setPlotAging76Open(false);
+        }
+        setPostingAging76(false);
+    }
+    const filteredAging76History = useMemo(() => {
+        if (dsoPeriod === "all")
+            return aging76History;
+        const months = parseInt(dsoPeriod, 10);
+        const now = new Date();
+        const cutoff = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+        return aging76History.filter(h => new Date(h.point_date + "T00:00:00") >= cutoff);
+    }, [aging76History, dsoPeriod]);
+
     const priorTotals = useMemo(() => {
         if (!priorSnapshot)
             return null;
@@ -1289,7 +1388,11 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
     }, [invoices]);
     const byCustomer = useMemo(() => {
         return Object.entries(grouped).map(([name, list]) => {
-            const agg = { name, b0: 0, b46: 0, b76: 0, total: 0, count: list.length };
+            var _a, _b, _c;
+            const agg = { name, b0: 0, b46: 0, b76: 0, total: 0, count: list.length,
+                customerId: (_a = list[0]) === null || _a === void 0 ? void 0 : _a.customer_id,
+                daysToPay: (_b = list[0]) === null || _b === void 0 ? void 0 : (_b.customers && _b.customers.days_to_pay),
+                daysToPayNote: (_c = list[0]) === null || _c === void 0 ? void 0 : (_c.customers && _c.customers.days_to_pay_note) };
             list.forEach(inv => {
                 const bucket = bucketFor(computeAge(inv.invoice_date));
                 const balance = Number(inv.open_balance || 0);
@@ -1300,6 +1403,24 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
         });
     }, [grouped]);
     const [tableSortCol, setTableSortCol] = useState("name");
+    const [daysToPayModal, setDaysToPayModal] = useState(null); // { customerId, name, days, note } | null
+    const [savingDaysToPay, setSavingDaysToPay] = useState(false);
+    function openDaysToPay(c) {
+        setDaysToPayModal({ customerId: c.customerId, name: c.name, days: c.daysToPay != null ? String(c.daysToPay) : "", note: c.daysToPayNote || "" });
+    }
+    async function saveDaysToPay() {
+        if (!daysToPayModal || !daysToPayModal.customerId)
+            return;
+        setSavingDaysToPay(true);
+        const daysVal = daysToPayModal.days === "" ? null : parseInt(daysToPayModal.days, 10);
+        const { error } = await db.from('customers').update({ days_to_pay: (daysVal != null && !isNaN(daysVal)) ? daysVal : null, days_to_pay_note: daysToPayModal.note || null }).eq('id', daysToPayModal.customerId);
+        setSavingDaysToPay(false);
+        if (!error) {
+            setDaysToPayModal(null);
+            if (onRefresh)
+                onRefresh();
+        }
+    }
     const [tableSortDir, setTableSortDir] = useState("asc");
     function handleSortClick(col) {
         if (tableSortCol === col) {
@@ -1362,12 +1483,12 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             fmtMoney(grandTotals.total),
                             " total AR (auto) \u00F7 ",
                             avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…",
-                            " most recent month's billed revenue \u00D7 ",
+                            " most recent month's sales \u00D7 ",
                             daysInPeriod != null ? daysInPeriod : "…",
                             " days")),
                     React.createElement("div", { className: "text-right" }, editingAssumptions ? (React.createElement("div", { className: "flex flex-col items-end gap-1.5" },
                         React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
-                            "Most Recent Month's Billed Revenue",
+                            "Most Recent Month's Sales",
                             React.createElement("input", { className: "input w-28 text-right !py-1", value: salesInput, onChange: e => setSalesInput(e.target.value), autoFocus: true })),
                         React.createElement("label", { className: "flex items-center gap-2 text-[10px]", style: { color: "rgba(255,255,255,0.65)" } },
                             "Days in Period",
@@ -1378,7 +1499,7 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                             React.createElement("button", { className: "btn btn-primary !py-1 !px-2 !text-xs", onClick: saveAssumptions, disabled: savingAssumptions }, savingAssumptions ? "…" : "Save"),
                             React.createElement("button", { className: "btn btn-ghost !py-1 !px-2 !text-xs", onClick: () => setEditingAssumptions(false) }, "Cancel")))) : (React.createElement("div", { className: "flex flex-col items-end gap-0.5" },
                         React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
-                            "Billed Revenue: ",
+                            "Sales: ",
                             React.createElement("span", { className: "font-bold text-white" }, avgMonthlySales != null ? fmtMoney(avgMonthlySales) : "…")),
                         React.createElement("div", { className: "text-[10px] uppercase tracking-wide", style: { color: "rgba(255,255,255,0.65)" } },
                             "Days: ",
@@ -1413,7 +1534,7 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                     "% of total A/R")));
         })),
         React.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" },
-            React.createElement(AgingBandChart, { grandTotals: grandTotals, priorTotals: priorTotals }),
+            React.createElement(AgingBandChart, { grandTotals: grandTotals, priorTotals: priorTotals, aging76History: filteredAging76History, dsoPeriod: dsoPeriod, setDsoPeriod: setDsoPeriod, canEdit: canEdit, plotAging76Open: plotAging76Open, setPlotAging76Open: setPlotAging76Open, plotAging76Date: plotAging76Date, setPlotAging76Date: setPlotAging76Date, plotAging76Input: plotAging76Input, setPlotAging76Input: setPlotAging76Input, postingAging76: postingAging76, openPlotAging76Form: openPlotAging76Form, submitPlotAging76: submitPlotAging76 }),
             React.createElement(TopCustomersChart, { byCustomer: byCustomer, grandTotal: grandTotals.total, priorByCustomer: priorByCustomer, priorGrandTotal: priorTotals ? priorTotals.total : null })),
         React.createElement("div", { className: "glass rounded-xl" },
             React.createElement("div", { className: "sticky top-[68px] z-20 grid grid-cols-12 gap-2 px-4 py-3 text-[11px] font-bold uppercase tracking-widest border-b-2 rounded-t-xl", style: {
@@ -1439,7 +1560,12 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                         React.createElement("span", { className: "truncate" }, c.name),
                         React.createElement("span", { className: "text-xs text-stone-500 font-normal ml-1 flex-shrink-0" },
                             c.count,
-                            " inv.")),
+                            " inv."),
+                        React.createElement("button", {
+                            className: "text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 font-semibold " + (c.daysToPay ? "bg-amber-100 text-amber-700 border border-amber-300" : "bg-stone-100 text-stone-400 border border-stone-300"),
+                            title: c.daysToPayNote || (canEdit ? "Click to set Days to Pay" : ""),
+                            onClick: (e) => { e.stopPropagation(); if (canEdit) openDaysToPay(c); }
+                        }, c.daysToPay ? ("\u23F1\uFE0F " + c.daysToPay + "d") : (canEdit ? "+ Days to Pay" : ""))),
                     React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b0 ? BUCKET_META.b0.color : "#a89d84" } }, c.b0 ? fmtMoney(c.b0) : "—"),
                     React.createElement("div", { className: "col-span-2 text-right text-sm", style: { color: c.b46 ? BUCKET_META.b46.color : "#a89d84" } }, c.b46 ? fmtMoney(c.b46) : "—"),
                     React.createElement("div", { className: "col-span-2 text-right text-sm font-semibold", style: { color: c.b76 ? BUCKET_META.b76.color : "#a89d84" } }, c.b76 ? fmtMoney(c.b76) : "—"),
@@ -1450,7 +1576,20 @@ function AgingSummary({ invoices, onViewCustomerNotes, canEdit, profile }) {
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b0.color } }, fmtMoney(grandTotals.b0)),
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b46.color } }, fmtMoney(grandTotals.b46)),
                 React.createElement("div", { className: "col-span-2 text-right font-semibold", style: { color: BUCKET_META.b76.color } }, fmtMoney(grandTotals.b76)),
-                React.createElement("div", { className: "col-span-2 text-right font-extrabold text-stone-800" }, fmtMoney(grandTotals.total))))));
+                React.createElement("div", { className: "col-span-2 text-right font-extrabold text-stone-800" }, fmtMoney(grandTotals.total))),
+        daysToPayModal && (React.createElement("div", { className: "fixed inset-0 z-50 flex items-center justify-center px-4" },
+            React.createElement("div", { className: "absolute inset-0 bg-stone-900/50", onClick: () => setDaysToPayModal(null) }),
+            React.createElement("div", { className: "relative w-full max-w-sm glass glass-honey rounded-2xl p-6" },
+                React.createElement("div", { className: "flex items-start justify-between mb-3" },
+                    React.createElement("h2", { className: "text-base font-bold text-stone-800" }, "Days to Pay \u2014 ", daysToPayModal.name),
+                    React.createElement("button", { onClick: () => setDaysToPayModal(null), className: "btn btn-ghost !px-2 !py-1" }, "\u2715")),
+                React.createElement("label", { className: "block text-xs font-semibold text-stone-600 mb-1" }, "Days to Pay"),
+                React.createElement("input", { type: "number", className: "input w-full mb-3", value: daysToPayModal.days, onChange: e => setDaysToPayModal(Object.assign(Object.assign({}, daysToPayModal), { days: e.target.value })), placeholder: "e.g. 30", autoFocus: true }),
+                React.createElement("label", { className: "block text-xs font-semibold text-stone-600 mb-1" }, "Note (optional)"),
+                React.createElement("textarea", { className: "input w-full mb-4 resize-none", rows: 3, value: daysToPayModal.note, onChange: e => setDaysToPayModal(Object.assign(Object.assign({}, daysToPayModal), { note: e.target.value })), placeholder: "e.g. Net 30 terms, pays reliably on time" }),
+                React.createElement("div", { className: "flex gap-2 justify-end" },
+                    React.createElement("button", { className: "btn btn-ghost", onClick: () => setDaysToPayModal(null) }, "Cancel"),
+                    React.createElement("button", { className: "btn btn-primary", onClick: saveDaysToPay, disabled: savingDaysToPay }, savingDaysToPay ? "Saving\u2026" : "Save"))))))));
 }
 function Dashboard({ profile, onSignOut }) {
     const [invoices, setInvoices] = useState([]);
@@ -1489,7 +1628,7 @@ function Dashboard({ profile, onSignOut }) {
     const loadInvoices = useCallback(async () => {
         const { data, error } = await db
             .from('invoices')
-            .select('*, customers(id,name,assigned_to)')
+            .select('*, customers(id,name,assigned_to,days_to_pay,days_to_pay_note)')
             .order('invoice_date', { ascending: true });
         if (!error)
             setInvoices(data || []);
@@ -1705,7 +1844,7 @@ function Dashboard({ profile, onSignOut }) {
                         React.createElement("div", { className: "flex gap-2 mb-4" },
                             React.createElement("button", { className: "btn " + (view === "invoices" ? "btn-primary" : "btn-ghost"), onClick: () => setView("invoices") }, "Invoices"),
                             React.createElement("button", { className: "btn " + (view === "summary" ? "btn-primary" : "btn-ghost"), onClick: () => setView("summary") }, "Aging Summary")),
-                        view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes, canEdit: canEdit, profile: profile }))) : (React.createElement(React.Fragment, null,
+                        view === "summary" ? (loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : (React.createElement(AgingSummary, { invoices: invoices, onViewCustomerNotes: viewCustomerNotes, canEdit: canEdit, profile: profile, onRefresh: loadInvoices }))) : (React.createElement(React.Fragment, null,
                             React.createElement("div", { className: "flex flex-wrap items-center gap-3 mb-4" },
                                 React.createElement("input", { className: "input flex-1 min-w-[220px]", placeholder: "Search customer, invoice #, or PO\u2026", value: search, onChange: e => setSearch(e.target.value) }),
                                 React.createElement("select", { className: "input", value: customerFilter, onChange: e => setCustomerFilter(e.target.value) },
