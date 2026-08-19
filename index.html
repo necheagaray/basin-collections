@@ -939,23 +939,31 @@ function ComparisonBarRow({ label, value, share, priorValue, priorShare, color }
         React.createElement("div", { className: "w-full h-3 rounded-full bg-stone-200/80 overflow-hidden mb-1" },
             React.createElement("div", { className: "h-full rounded-full", style: { width: Math.max(share, 1.5) + "%", background: color } }))));
 }
+function fmtAxisMoney(v) {
+    if (v === 0)
+        return "$0";
+    if (v >= 1000000)
+        return "$" + (v / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    return "$" + Math.round(v / 1000) + "K";
+}
 function Aging76TrendChart({ history }) {
-    const W = 640, H = 90;
-    const padTop = 8, padBottom = 16, padLeft = 8, padRight = 8;
+    const Y_MIN = 0, Y_MAX = 1600000, Y_STEP = 400000;
+    const W = 640, H = 120;
+    const padTop = 10, padBottom = 18, padLeft = 40, padRight = 8;
     const plotW = W - padLeft - padRight;
     const plotH = H - padTop - padBottom;
     const hasData = history && history.length > 0;
+    const gridValues = [0, 400000, 800000, 1200000, 1600000];
+    const yForValue = v => padTop + plotH - ((Math.max(Y_MIN, Math.min(Y_MAX, v)) - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
+    const grid = gridValues.map(v => (React.createElement("g", { key: v },
+        React.createElement("line", { x1: padLeft, x2: W - padRight, y1: yForValue(v), y2: yForValue(v), stroke: "rgba(80,60,40,0.12)", strokeWidth: "1" }),
+        React.createElement("text", { x: padLeft - 6, y: yForValue(v) + 3, textAnchor: "end", fontSize: "8", fill: "#8a7a6a" }, fmtAxisMoney(v)))));
     if (!hasData) {
-        return React.createElement("p", { className: "text-[10px] text-stone-400 text-center py-3" }, "No 76+ balance history plotted yet.");
+        return (React.createElement("div", { className: "relative" },
+            React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "120px", opacity: 0.7 } }, grid),
+            React.createElement("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none" },
+                React.createElement("p", { className: "text-[10px] text-stone-400 px-2 py-1 rounded bg-stone-50/80" }, "No 76+ balance history plotted yet."))));
     }
-    const values = history.map(h => Number(h.balance));
-    const rawMin = Math.min(...values, 0);
-    const rawMax = Math.max(...values);
-    const pad = (rawMax - rawMin) * 0.15 || rawMax * 0.1 || 1000;
-    const minV = Math.max(0, rawMin - pad);
-    const maxV = rawMax + pad;
-    const range = (maxV - minV) || 1;
-    const yForValue = v => padTop + plotH - ((v - minV) / range) * plotH;
     const points = history.map((h, i) => {
         const x = history.length === 1 ? padLeft + plotW / 2 : padLeft + (i / (history.length - 1)) * plotW;
         return { x, y: yForValue(Number(h.balance)), date: h.point_date, value: Number(h.balance) };
@@ -964,16 +972,20 @@ function Aging76TrendChart({ history }) {
     const areaPath = points.length > 1
         ? linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`
         : "";
-    return (React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "90px", opacity: 0.7 } },
+    return (React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "120px", opacity: 0.85 } },
         React.createElement("defs", null,
             React.createElement("linearGradient", { id: "aging76Fill", x1: "0", y1: "0", x2: "0", y2: "1" },
                 React.createElement("stop", { offset: "0%", stopColor: "var(--neon-pink)", stopOpacity: "0.3" }),
                 React.createElement("stop", { offset: "100%", stopColor: "var(--neon-pink)", stopOpacity: "0" }))),
+        grid,
         points.length > 1 && (React.createElement(React.Fragment, null,
             React.createElement("path", { d: areaPath, fill: "url(#aging76Fill)" }),
-            React.createElement("path", { d: linePath, fill: "none", stroke: "var(--neon-pink)", strokeWidth: "1.5", strokeLinejoin: "round", strokeLinecap: "round", opacity: 0.55 }))),
-        points.map((p, i) => (React.createElement("g", { key: i },
-            React.createElement("circle", { cx: p.x, cy: p.y, r: 2.5, fill: "var(--neon-pink)", opacity: 0.65 }),
+            React.createElement("path", { d: linePath, fill: "none", stroke: "var(--neon-pink)", strokeWidth: "1.5", strokeLinejoin: "round", strokeLinecap: "round", opacity: 0.6 }))),
+        points.map((p, i) => (React.createElement("g", { key: i, style: { cursor: "pointer" } },
+            React.createElement("circle", { cx: p.x, cy: p.y, r: 8, fill: "transparent" },
+                React.createElement("title", null, fmtDate(p.date) + ": " + fmtMoney(p.value))),
+            React.createElement("circle", { cx: p.x, cy: p.y, r: 2.8, fill: "var(--neon-pink)", opacity: 0.75 },
+                React.createElement("title", null, fmtDate(p.date) + ": " + fmtMoney(p.value))),
             React.createElement("text", { x: p.x, y: H - 4, textAnchor: "middle", fontSize: "8", fill: "#8a7a6a" }, fmtDate(p.date)))))));
 }
 function AgingBandChart({ grandTotals, priorTotals, aging76History, dsoPeriod, setDsoPeriod, canEdit, plotAging76Open, setPlotAging76Open, plotAging76Date, setPlotAging76Date, plotAging76Input, setPlotAging76Input, postingAging76, openPlotAging76Form, submitPlotAging76 }) {
