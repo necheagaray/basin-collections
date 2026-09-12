@@ -373,6 +373,29 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote, onDe
    PRIORITY ALARM PANEL
    ============================================================ */
 function PriorityAlarm({ invoices, onOpen, onUnflag, canEdit, onOpenCollectionsUpdate }) {
+    const editors = TEAM.filter(p => p.role === "editor");
+    const groups = editors.map(p => ({
+        person: p,
+        items: invoices.filter(inv => { var _a; return ((_a = inv.customers) === null || _a === void 0 ? void 0 : _a.assigned_to) === p.id; }),
+    }));
+    const unassigned = invoices.filter(inv => { var _a; return !((_a = inv.customers) === null || _a === void 0 ? void 0 : _a.assigned_to); });
+    const allGroups = unassigned.length > 0
+        ? [...groups, { person: { id: "unassigned", display_name: "Unassigned" }, items: unassigned }]
+        : groups;
+
+    function renderRow(inv) {
+        var _a;
+        const age = computeAge(inv.invoice_date);
+        return (React.createElement("div", { key: inv.id, className: "glass glass-terracotta rounded-lg px-2 py-1.5 hover:border-red-400 transition cursor-pointer group flex items-center justify-between gap-2", onClick: () => onOpen(inv) },
+            React.createElement("div", { className: "min-w-0 flex items-baseline gap-1.5" },
+                React.createElement("span", { className: "text-[10px] text-stone-500 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
+                React.createElement("span", { className: "text-xs font-bold text-stone-800 truncate flex-shrink-0" }, inv.document_number)),
+            React.createElement("div", { className: "flex items-center gap-1.5 flex-shrink-0" },
+                React.createElement("span", { className: "px-1.5 py-0.5 rounded-full text-[10px] font-semibold " + ageBucketClass(age) }, age, "d"),
+                React.createElement("span", { className: "font-semibold text-xs", style: { color: "var(--neon-amber)" } }, fmtMoney(inv.open_balance)),
+                canEdit && (React.createElement("button", { className: "text-stone-500 hover:text-red-600 text-[10px] flex-shrink-0", title: "Remove from priorities", onClick: (e) => { e.stopPropagation(); onUnflag(inv); } }, "\u2715")))));
+    }
+
     return (React.createElement("div", { className: "mb-4 rounded-xl overflow-hidden siren-border" },
         React.createElement("div", { className: "px-3 py-2 flex items-center justify-between flex-wrap gap-2", style: { background: "linear-gradient(90deg, rgba(168,80,58,.16), rgba(168,121,31,.14))" } },
             React.createElement("div", { className: "flex items-center gap-1.5" },
@@ -384,18 +407,13 @@ function PriorityAlarm({ invoices, onOpen, onUnflag, canEdit, onOpenCollectionsU
                 style: { background: "linear-gradient(135deg, #4d76a4, #1f3a5a)", color: "#fff", boxShadow: "0 2px 8px rgba(31,58,90,.3)" },
                 onClick: onOpenCollectionsUpdate
             }, "\uD83D\uDCCA Collections Update"))),
-        invoices.length > 0 && (React.createElement("div", { className: "bg-stone-900/10 p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5" }, invoices.map(inv => {
-            var _a;
-            const age = computeAge(inv.invoice_date);
-            return (React.createElement("div", { key: inv.id, className: "glass glass-terracotta rounded-lg px-2 py-1.5 hover:border-red-400 transition cursor-pointer group flex items-center justify-between gap-2", onClick: () => onOpen(inv) },
-                React.createElement("div", { className: "min-w-0 flex items-baseline gap-1.5" },
-                    React.createElement("span", { className: "text-[10px] text-stone-500 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
-                    React.createElement("span", { className: "text-xs font-bold text-stone-800 truncate flex-shrink-0" }, inv.document_number)),
-                React.createElement("div", { className: "flex items-center gap-1.5 flex-shrink-0" },
-                    React.createElement("span", { className: "px-1.5 py-0.5 rounded-full text-[10px] font-semibold " + ageBucketClass(age) }, age, "d"),
-                    React.createElement("span", { className: "font-semibold text-xs", style: { color: "var(--neon-amber)" } }, fmtMoney(inv.open_balance)),
-                    canEdit && (React.createElement("button", { className: "text-stone-500 hover:text-red-600 text-[10px] flex-shrink-0", title: "Remove from priorities", onClick: (e) => { e.stopPropagation(); onUnflag(inv); } }, "\u2715")))));
-        })))));
+        invoices.length > 0 && (React.createElement("div", { className: "bg-stone-900/10 p-2 grid grid-cols-1 sm:grid-cols-3 gap-2" }, allGroups.map(g => (React.createElement("div", { key: g.person.id, className: "min-w-0" },
+            React.createElement("div", { className: "flex items-center gap-1.5 mb-1.5 px-1" },
+                React.createElement("span", { className: "text-[10px] font-extrabold uppercase tracking-wide " + (g.person.id === "unassigned" ? "text-stone-500" : "text-stone-700") }, g.person.display_name),
+                React.createElement("span", { className: "text-[9px] px-1.5 py-0.5 rounded-full bg-stone-900/15 text-stone-600" }, g.items.length)),
+            g.items.length === 0
+                ? React.createElement("div", { className: "text-[10px] text-stone-400 italic px-1 py-2" }, "No priorities assigned")
+                : React.createElement("div", { className: "space-y-1.5" }, g.items.map(renderRow)))))))));
 }
 /* ============================================================
    UPLOAD (parses full aged AR export and syncs)
@@ -947,20 +965,21 @@ function fmtAxisMoney(v) {
     return "$" + Math.round(v / 1000) + "K";
 }
 function Aging76TrendChart({ history }) {
+    const [hoverIdx, setHoverIdx] = useState(null);
     const Y_MIN = 0, Y_MAX = 1600000, Y_STEP = 400000;
-    const W = 640, H = 120;
-    const padTop = 10, padBottom = 18, padLeft = 40, padRight = 8;
+    const W = 640, H = 130;
+    const padTop = 10, padBottom = 22, padLeft = 52, padRight = 10;
     const plotW = W - padLeft - padRight;
     const plotH = H - padTop - padBottom;
     const hasData = history && history.length > 0;
     const gridValues = [0, 400000, 800000, 1200000, 1600000];
     const yForValue = v => padTop + plotH - ((Math.max(Y_MIN, Math.min(Y_MAX, v)) - Y_MIN) / (Y_MAX - Y_MIN)) * plotH;
     const grid = gridValues.map(v => (React.createElement("g", { key: v },
-        React.createElement("line", { x1: padLeft, x2: W - padRight, y1: yForValue(v), y2: yForValue(v), stroke: "rgba(80,60,40,0.12)", strokeWidth: "1" }),
-        React.createElement("text", { x: padLeft - 6, y: yForValue(v) + 3, textAnchor: "end", fontSize: "8", fill: "#8a7a6a" }, fmtAxisMoney(v)))));
+        React.createElement("line", { x1: padLeft, x2: W - padRight, y1: yForValue(v), y2: yForValue(v), stroke: "rgba(80,60,40,0.18)", strokeWidth: "1" }),
+        React.createElement("text", { x: padLeft - 8, y: yForValue(v) + 4, textAnchor: "end", fontSize: "11", fontWeight: "600", fill: "#5c4d3d" }, fmtAxisMoney(v)))));
     if (!hasData) {
         return (React.createElement("div", { className: "relative" },
-            React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "120px", opacity: 0.7 } }, grid),
+            React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "130px" } }, grid),
             React.createElement("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none" },
                 React.createElement("p", { className: "text-[10px] text-stone-400 px-2 py-1 rounded bg-stone-50/80" }, "No 76+ balance history plotted yet."))));
     }
@@ -972,21 +991,37 @@ function Aging76TrendChart({ history }) {
     const areaPath = points.length > 1
         ? linePath + ` L${points[points.length - 1].x.toFixed(1)},${(padTop + plotH).toFixed(1)} L${points[0].x.toFixed(1)},${(padTop + plotH).toFixed(1)} Z`
         : "";
-    return (React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "120px", opacity: 0.85 } },
-        React.createElement("defs", null,
-            React.createElement("linearGradient", { id: "aging76Fill", x1: "0", y1: "0", x2: "0", y2: "1" },
-                React.createElement("stop", { offset: "0%", stopColor: "var(--neon-pink)", stopOpacity: "0.3" }),
-                React.createElement("stop", { offset: "100%", stopColor: "var(--neon-pink)", stopOpacity: "0" }))),
-        grid,
-        points.length > 1 && (React.createElement(React.Fragment, null,
-            React.createElement("path", { d: areaPath, fill: "url(#aging76Fill)" }),
-            React.createElement("path", { d: linePath, fill: "none", stroke: "var(--neon-pink)", strokeWidth: "1.5", strokeLinejoin: "round", strokeLinecap: "round", opacity: 0.6 }))),
-        points.map((p, i) => (React.createElement("g", { key: i, style: { cursor: "pointer" } },
-            React.createElement("circle", { cx: p.x, cy: p.y, r: 8, fill: "transparent" },
-                React.createElement("title", null, fmtDate(p.date) + ": " + fmtMoney(p.value))),
-            React.createElement("circle", { cx: p.x, cy: p.y, r: 2.8, fill: "var(--neon-pink)", opacity: 0.75 },
-                React.createElement("title", null, fmtDate(p.date) + ": " + fmtMoney(p.value))),
-            React.createElement("text", { x: p.x, y: H - 4, textAnchor: "middle", fontSize: "8", fill: "#8a7a6a" }, fmtDate(p.date)))))));
+    const hovered = hoverIdx != null ? points[hoverIdx] : null;
+    return (React.createElement("div", { className: "relative" },
+        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, className: "w-full", style: { height: "130px" } },
+            React.createElement("defs", null,
+                React.createElement("linearGradient", { id: "aging76Fill", x1: "0", y1: "0", x2: "0", y2: "1" },
+                    React.createElement("stop", { offset: "0%", stopColor: "var(--neon-pink)", stopOpacity: "0.3" }),
+                    React.createElement("stop", { offset: "100%", stopColor: "var(--neon-pink)", stopOpacity: "0" }))),
+            grid,
+            points.length > 1 && (React.createElement(React.Fragment, null,
+                React.createElement("path", { d: areaPath, fill: "url(#aging76Fill)" }),
+                React.createElement("path", { d: linePath, fill: "none", stroke: "var(--neon-pink)", strokeWidth: "1.8", strokeLinejoin: "round", strokeLinecap: "round", opacity: 0.75 }))),
+            points.map((p, i) => (React.createElement("g", {
+                key: i,
+                style: { cursor: "pointer" },
+                onMouseEnter: () => setHoverIdx(i),
+                onMouseLeave: () => setHoverIdx(null)
+            },
+                React.createElement("circle", { cx: p.x, cy: p.y, r: 10, fill: "transparent" }),
+                React.createElement("circle", { cx: p.x, cy: p.y, r: hoverIdx === i ? 4.5 : 3, fill: "var(--neon-pink)", opacity: hoverIdx === i ? 1 : 0.85 }),
+                React.createElement("text", { x: p.x, y: H - 6, textAnchor: "middle", fontSize: "10", fontWeight: "600", fill: "#5c4d3d" }, fmtDate(p.date))))),
+            hovered && (React.createElement("line", { x1: hovered.x, x2: hovered.x, y1: padTop, y2: padTop + plotH, stroke: "rgba(80,60,40,0.35)", strokeWidth: "1", strokeDasharray: "3,2" }))),
+        hovered && (React.createElement("div", {
+            className: "absolute pointer-events-none px-2 py-1 rounded-md text-[11px] font-bold text-white shadow-lg whitespace-nowrap",
+            style: {
+                left: (hovered.x / W * 100) + "%",
+                top: (hovered.y / H * 100) + "%",
+                transform: "translate(-50%, -135%)",
+                background: "rgba(45,35,25,0.92)",
+                zIndex: 10,
+            }
+        }, fmtDate(hovered.date) + ": " + fmtMoney(hovered.value)))));
 }
 function AgingBandChart({ grandTotals, priorTotals, aging76History, dsoPeriod, setDsoPeriod, canEdit, plotAging76Open, setPlotAging76Open, plotAging76Date, setPlotAging76Date, plotAging76Input, setPlotAging76Input, postingAging76, openPlotAging76Form, submitPlotAging76 }) {
     return (React.createElement("div", { className: "glass glass-sage rounded-xl p-4" },
@@ -1049,6 +1084,7 @@ function TopCustomersChart({ byCustomer, grandTotal, priorByCustomer, priorGrand
    ============================================================ */
 function BigPaymentsModal({ onClose, onOpenCustomer }) {
     const [payments, setPayments] = useState([]);
+    const [latestDate, setLatestDate] = useState(null);
     const [loading, setLoading] = useState(true);
     useEffect(() => {
         let cancelled = false;
@@ -1056,10 +1092,13 @@ function BigPaymentsModal({ onClose, onOpenCustomer }) {
             setLoading(true);
             const { data, error } = await db.from('big_payments_log')
                 .select('*')
+                .order('detected_date', { ascending: false })
                 .order('created_at', { ascending: false })
                 .limit(50);
-            if (!cancelled && !error) {
-                setPayments(data || []);
+            if (!cancelled && !error && data) {
+                const maxDate = data.length ? data[0].detected_date : null;
+                setLatestDate(maxDate);
+                setPayments(maxDate ? data.filter(p => p.detected_date === maxDate) : []);
             }
             if (!cancelled)
                 setLoading(false);
@@ -1073,7 +1112,7 @@ function BigPaymentsModal({ onClose, onOpenCustomer }) {
             React.createElement("div", { className: "flex items-start justify-between mb-3 flex-shrink-0" },
                 React.createElement("div", null,
                     React.createElement("h2", { className: "text-lg font-bold text-stone-800" }, "\uD83D\uDCB0 Big Payments"),
-                    React.createElement("p", { className: "text-[11px] text-stone-500 mt-0.5" }, "Invoices over 1% of the prior week's total AR that dropped off the aging report")),
+                    React.createElement("p", { className: "text-[11px] text-stone-500 mt-0.5" }, latestDate ? ("Invoices over 1% of the prior week's total AR that dropped off the " + fmtDate(latestDate) + " aging report") : "Invoices over 1% of the prior week's total AR that dropped off the most recent aging report")),
                 React.createElement("button", { onClick: onClose, className: "btn btn-ghost !px-2 !py-1 flex-shrink-0" }, "\u2715")),
             loading ? (React.createElement("div", { className: "text-center text-stone-500 py-10" }, "Loading\u2026")) : payments.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-10 text-sm" }, "No big payments detected yet \u2014 this fills in after your next weekly upload finds a match.")) : (React.createElement("div", { className: "space-y-2 overflow-y-auto pr-1 flex-1 min-h-0" }, payments.map(p => (React.createElement("div", { key: p.id, className: "border border-stone-300/60 rounded-xl p-3 hover:border-amber-500 cursor-pointer transition", onClick: () => onOpenCustomer(p.customer_name) },
                 React.createElement("div", { className: "flex items-center justify-between gap-2" },
