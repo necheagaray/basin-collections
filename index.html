@@ -1791,6 +1791,11 @@ function Dashboard({ profile, onSignOut }) {
         invoices.forEach(inv => { c[bucketFor(computeAge(inv.invoice_date))]++; });
         return c;
     }, [invoices]);
+    const bucketTotals = useMemo(() => {
+        const t = { b0: 0, b46: 0, b76: 0 };
+        invoices.forEach(inv => { t[bucketFor(computeAge(inv.invoice_date))] += Number(inv.open_balance || 0); });
+        return t;
+    }, [invoices]);
     const arOver60 = useMemo(() => {
         const balance = invoices.reduce((s, inv) => {
             return computeAge(inv.invoice_date) >= 61 ? s + Number(inv.open_balance || 0) : s;
@@ -1877,7 +1882,11 @@ function Dashboard({ profile, onSignOut }) {
                             React.createElement("div", { className: "text-[10px] leading-tight", style: { color: "rgba(255,255,255,0.9)", textShadow: "0 1px 3px rgba(0,0,0,0.45)" } },
                                 count,
                                 " invoice",
-                                count === 1 ? "" : "s")));
+                                count === 1 ? "" : "s"),
+                            React.createElement("div", {
+                                className: "inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold",
+                                style: { background: "rgba(255,255,255,0.22)", color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.4)", backdropFilter: "blur(2px)" }
+                            }, fmtMoneyRounded(bucketTotals[key]))));
                     }))))),
             React.createElement(PriorityAlarm, { invoices: priorityInvoices, onOpen: openNotes, onUnflag: togglePriority, canEdit: canEdit, onOpenCollectionsUpdate: () => setCollectionsUpdateOpen(true) }),
             React.createElement("div", { className: "relative left-1/2 right-1/2 -mx-[50vw] w-screen" },
