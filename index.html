@@ -370,50 +370,116 @@ function NotesPanel({ invoice, notes, profile, canEdit, onClose, onAddNote, onDe
                     React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : "Add note")))) : (React.createElement("div", { className: "text-xs text-stone-500 italic text-center py-2" }, "Guest view \u2014 read only")))));
 }
 /* ============================================================
-   PRIORITY ALARM PANEL
+   TOP OF MIND
+   A pinned strategy & protocol message that everyone sees at the top of
+   the app. Only people listed in TOP_OF_MIND_EDITORS can change it.
+   (This is a UI-level restriction, like the Guest view.)
    ============================================================ */
-function PriorityAlarm({ invoices, onOpen, onUnflag, canEdit, onOpenCollectionsUpdate }) {
-    const editors = TEAM.filter(p => p.role === "editor");
-    const groups = editors.map(p => ({
-        person: p,
-        items: invoices.filter(inv => { var _a; return ((_a = inv.customers) === null || _a === void 0 ? void 0 : _a.assigned_to) === p.id; }),
-    }));
-    const unassigned = invoices.filter(inv => { var _a; return !((_a = inv.customers) === null || _a === void 0 ? void 0 : _a.assigned_to); });
-    const allGroups = unassigned.length > 0
-        ? [...groups, { person: { id: "unassigned", display_name: "Unassigned" }, items: unassigned }]
-        : groups;
-
-    function renderRow(inv) {
-        var _a;
-        const age = computeAge(inv.invoice_date);
-        return (React.createElement("div", { key: inv.id, className: "glass glass-terracotta rounded-lg px-2 py-1.5 hover:border-red-400 transition cursor-pointer group flex items-center justify-between gap-2", onClick: () => onOpen(inv) },
-            React.createElement("div", { className: "min-w-0 flex items-baseline gap-1.5" },
-                React.createElement("span", { className: "text-[10px] text-stone-500 truncate" }, (_a = inv.customers) === null || _a === void 0 ? void 0 : _a.name),
-                React.createElement("span", { className: "text-xs font-bold text-stone-800 truncate flex-shrink-0" }, inv.document_number)),
-            React.createElement("div", { className: "flex items-center gap-1.5 flex-shrink-0" },
-                React.createElement("span", { className: "px-1.5 py-0.5 rounded-full text-[10px] font-semibold " + ageBucketClass(age) }, age, "d"),
-                React.createElement("span", { className: "font-semibold text-xs", style: { color: "var(--neon-amber)" } }, fmtMoney(inv.open_balance)),
-                canEdit && (React.createElement("button", { className: "text-stone-500 hover:text-red-600 text-[10px] flex-shrink-0", title: "Remove from priorities", onClick: (e) => { e.stopPropagation(); onUnflag(inv); } }, "\u2715")))));
+const TOP_OF_MIND_EDITORS = ["nick"];
+function TopOfMind({ profile, onOpenCollectionsUpdate }) {
+    const canEditMessage = TOP_OF_MIND_EDITORS.includes(profile.id);
+    const [loaded, setLoaded] = useState(false);
+    const [row, setRow] = useState(null); // { message, updated_by, updated_at } | null
+    const [loadError, setLoadError] = useState(null);
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState(null);
+    const load = useCallback(async () => {
+        const { data, error } = await db.from('top_of_mind').select('message, updated_by, updated_at').eq('id', 1).maybeSingle();
+        if (error) {
+            console.error("top_of_mind load failed:", error);
+            setLoadError(error.message);
+        }
+        else {
+            setLoadError(null);
+            setRow(data || null);
+        }
+        setLoaded(true);
+    }, []);
+    useEffect(() => {
+        load();
+        const ch = db.channel('realtime-top-of-mind')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'top_of_mind' }, () => { load(); })
+            .subscribe();
+        return () => { db.removeChannel(ch); };
+    }, [load]);
+    function startEdit() {
+        setDraft(row && row.message ? row.message : "");
+        setSaveError(null);
+        setEditing(true);
     }
-
-    return (React.createElement("div", { className: "mb-4 rounded-xl overflow-hidden siren-border" },
-        React.createElement("div", { className: "px-3 py-2 flex items-center justify-between flex-wrap gap-2", style: { background: "linear-gradient(90deg, rgba(168,80,58,.16), rgba(168,121,31,.14))" } },
-            React.createElement("div", { className: "flex items-center gap-1.5" },
-                React.createElement("span", { className: "text-sm" }, "\uD83D\uDEA8"),
-                React.createElement("h2", { className: "font-extrabold tracking-wide text-xs uppercase flicker", style: { color: "var(--neon-pink)" } }, "This Week's Priorities"),
-                invoices.length > 0 && React.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded-full bg-stone-900/20 text-stone-600" }, invoices.length)),
-            onOpenCollectionsUpdate && (React.createElement("button", {
-                className: "btn !py-1 !px-2.5 !text-xs !font-bold",
-                style: { background: "linear-gradient(135deg, #4d76a4, #1f3a5a)", color: "#fff", boxShadow: "0 2px 8px rgba(31,58,90,.3)" },
-                onClick: onOpenCollectionsUpdate
-            }, "\uD83D\uDCCA Collections Update"))),
-        invoices.length > 0 && (React.createElement("div", { className: "bg-stone-900/10 p-2 grid grid-cols-1 sm:grid-cols-3 gap-2" }, allGroups.map(g => (React.createElement("div", { key: g.person.id, className: "min-w-0" },
-            React.createElement("div", { className: "flex items-center gap-1.5 mb-1.5 px-1" },
-                React.createElement("span", { className: "text-[10px] font-extrabold uppercase tracking-wide " + (g.person.id === "unassigned" ? "text-stone-500" : "text-stone-700") }, g.person.display_name),
-                React.createElement("span", { className: "text-[9px] px-1.5 py-0.5 rounded-full bg-stone-900/15 text-stone-600" }, g.items.length)),
-            g.items.length === 0
-                ? React.createElement("div", { className: "text-[10px] text-stone-400 italic px-1 py-2" }, "No priorities assigned")
-                : React.createElement("div", { className: "space-y-1.5" }, g.items.map(renderRow)))))))));
+    async function save() {
+        setSaving(true);
+        setSaveError(null);
+        const { error } = await db.from('top_of_mind').upsert({
+            id: 1,
+            message: draft.trim(),
+            updated_by: profile.display_name,
+            updated_at: new Date().toISOString(),
+        });
+        setSaving(false);
+        if (error) {
+            console.error("top_of_mind save failed:", error);
+            setSaveError(error.message);
+            return;
+        }
+        setEditing(false);
+        await load();
+    }
+    const message = row && row.message ? row.message : "";
+    const GOLD = "#f2cf6e";
+    const btnBase = { border: "1px solid rgba(255,255,255,0.35)", borderRadius: "10px", padding: "7px 13px", fontSize: "12px", fontWeight: "700", cursor: "pointer", lineHeight: "1.2" };
+    let body;
+    if (!loaded) {
+        body = React.createElement("div", { style: { fontSize: "14px", color: "rgba(255,255,255,0.75)", fontStyle: "italic" } }, "Loading\u2026");
+    }
+    else if (editing) {
+        body = React.createElement("div", null,
+            React.createElement("textarea", {
+                className: "input",
+                value: draft,
+                maxLength: 3000,
+                autoFocus: true,
+                placeholder: "Write the message everyone should see first \u2014 strategy, protocol, what to do and not do\u2026",
+                onChange: e => setDraft(e.target.value),
+                onKeyDown: e => {
+                    if (e.key === "Escape")
+                        setEditing(false);
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey))
+                        save();
+                },
+                style: { width: "100%", minHeight: "170px", padding: "12px 14px", fontSize: "15px", lineHeight: "1.55", fontFamily: "inherit", resize: "vertical", borderRadius: "10px", boxSizing: "border-box", display: "block" }
+            }),
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", marginTop: "10px" } },
+                React.createElement("span", { style: { fontSize: "11px", color: "rgba(255,255,255,0.7)" } }, draft.length + " / 3000 \u00B7 Ctrl+Enter to save"),
+                React.createElement("div", { style: { display: "flex", gap: "8px" } },
+                    React.createElement("button", { onClick: () => setEditing(false), disabled: saving, style: Object.assign({}, btnBase, { background: "rgba(255,255,255,0.14)", color: "#fff" }) }, "Cancel"),
+                    React.createElement("button", { onClick: save, disabled: saving, style: Object.assign({}, btnBase, { background: "#e0b24a", color: "#2b1d05", border: "1px solid #e0b24a" }) }, saving ? "Saving\u2026" : "Save message"))),
+            saveError && (React.createElement("div", { style: { marginTop: "10px", padding: "8px 12px", borderRadius: "8px", background: "#fde8e4", color: "#8a2a1a", fontSize: "12px", fontWeight: "600" } }, "Couldn't save: " + saveError)));
+    }
+    else if (message) {
+        body = React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: "18px", lineHeight: "1.6", fontWeight: "600", whiteSpace: "pre-wrap", wordBreak: "break-word", textShadow: "0 1px 2px rgba(0,0,0,0.25)", maxWidth: "1000px" } }, message),
+            React.createElement("div", { style: { marginTop: "10px", fontSize: "11px", color: "rgba(255,255,255,0.72)" } },
+                "Posted by " + (row.updated_by || "the team") + (row.updated_at ? " \u00B7 " + fmtDateTime(row.updated_at) : "")));
+    }
+    else {
+        body = React.createElement("div", { style: { fontSize: "15px", color: "rgba(255,255,255,0.85)", fontStyle: "italic" } },
+            canEditMessage ? "Nothing posted yet. Use Edit message to share strategy and protocol with the team." : "No message has been posted yet.");
+    }
+    return (React.createElement("div", { role: "region", "aria-label": "Top of Mind message", style: { marginBottom: "16px", borderRadius: "14px", overflow: "hidden", borderLeft: "7px solid #e0b24a", color: "#fff", background: "linear-gradient(135deg, #274a47 0%, #3f6e6b 55%, #4b7a5a 100%)", boxShadow: "0 10px 28px rgba(39,74,71,0.28), inset 0 1px 0 rgba(255,255,255,0.18)" } },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", padding: "13px 18px 0 18px" } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" } },
+                React.createElement("span", { style: { fontSize: "19px", lineHeight: "1" } }, "\uD83D\uDCCC"),
+                React.createElement("h2", { style: { margin: "0", fontSize: "15px", fontWeight: "800", letterSpacing: "0.16em", textTransform: "uppercase", color: GOLD } }, "Top of Mind"),
+                React.createElement("span", { style: { fontSize: "10px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 9px", borderRadius: "999px", background: "rgba(255,255,255,0.16)" } }, "Strategy & Protocol")),
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" } },
+                canEditMessage && !editing && loaded && (React.createElement("button", { onClick: startEdit, title: "Edit the Top of Mind message", style: Object.assign({}, btnBase, { background: "rgba(255,255,255,0.16)", color: "#fff" }) }, "\u270F\uFE0F Edit message")),
+                onOpenCollectionsUpdate && (React.createElement("button", { onClick: onOpenCollectionsUpdate, style: Object.assign({}, btnBase, { background: "#f6f1e4", color: "#1f3a5a", fontWeight: "800", border: "1px solid #f6f1e4", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }) }, "\uD83D\uDCCA Collections Update")))),
+        React.createElement("div", { style: { padding: "12px 18px 17px 18px" } },
+            body,
+            canEditMessage && loadError && (React.createElement("div", { style: { marginTop: "10px", padding: "8px 12px", borderRadius: "8px", background: "rgba(0,0,0,0.28)", fontSize: "12px" } }, "Top of Mind isn't set up in the database yet \u2014 run add-top-of-mind.sql in Supabase, then refresh.")))));
 }
 /* ============================================================
    UPLOAD (parses full aged AR export and syncs)
@@ -651,7 +717,7 @@ function UploadButton({ profile, onDone }) {
 /* ============================================================
    CUSTOMER GROUP + INVOICE ROW
    ============================================================ */
-function InvoiceRow({ inv, canEdit, onOpenNotes, onTogglePriority, noteCount, selectMode, selected, onToggleSelect }) {
+function InvoiceRow({ inv, canEdit, onOpenNotes, noteCount, selectMode, selected, onToggleSelect }) {
     const age = computeAge(inv.invoice_date);
     return (React.createElement("div", { className: "grid grid-cols-12 gap-2 items-center px-4 py-2.5 even:bg-stone-900/[0.025] hover:bg-stone-200/50 rounded-lg cursor-pointer group", onClick: () => selectMode ? onToggleSelect(inv.id) : onOpenNotes(inv) },
         React.createElement("div", { className: "col-span-3 font-mono text-sm text-stone-700 flex items-center gap-2" },
@@ -662,14 +728,13 @@ function InvoiceRow({ inv, canEdit, onOpenNotes, onTogglePriority, noteCount, se
                 noteCount,
                 " note",
                 noteCount > 1 ? "s" : ""))),
-        React.createElement("div", { className: "col-span-2 text-xs text-stone-500 truncate" }, inv.po_number || "—"),
+        React.createElement("div", { className: "col-span-3 text-xs text-stone-500 truncate" }, inv.po_number || "—"),
         React.createElement("div", { className: "col-span-2 text-xs text-stone-500" }, fmtDate(inv.invoice_date)),
         React.createElement("div", { className: "col-span-1" },
             React.createElement("span", { className: "px-2 py-0.5 rounded-full text-xs font-semibold " + ageBucketClass(age) },
                 age,
                 "d")),
-        React.createElement("div", { className: "col-span-2 text-right font-semibold text-stone-700" }, fmtMoney(inv.open_balance)),
-        React.createElement("div", { className: "col-span-2 flex justify-end" }, canEdit && !selectMode && (React.createElement("button", { title: inv.is_priority ? "Remove from weekly priorities" : "Mark as weekly priority", className: "text-lg " + (inv.is_priority ? "" : "opacity-30 group-hover:opacity-70"), onClick: (e) => { e.stopPropagation(); onTogglePriority(inv); } }, inv.is_priority ? "🚨" : "🔕")))));
+        React.createElement("div", { className: "col-span-3 text-right font-semibold text-stone-700" }, fmtMoney(inv.open_balance))));
 }
 function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit }) {
     const [draft, setDraft] = useState("");
@@ -698,7 +763,7 @@ function BulkNoteModal({ customerName, invoiceIds, profile, onClose, onSubmit })
                 React.createElement("button", { className: "btn btn-ghost", onClick: onClose }, "Cancel"),
                 React.createElement("button", { className: "btn btn-primary", onClick: submit, disabled: saving || !draft.trim() }, saving ? "Saving…" : `Add to ${invoiceIds.length} invoice${invoiceIds.length > 1 ? "s" : ""}`)))));
 }
-function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority, notesCountMap, isOpen, onToggleOpen, onBulkAddNote, profile, onViewCustomerNotes, onAssignCustomer, onOpenDaysToPay }) {
+function CustomerGroup({ name, invoices, canEdit, onOpenNotes, notesCountMap, isOpen, onToggleOpen, onBulkAddNote, profile, onViewCustomerNotes, onAssignCustomer, onOpenDaysToPay }) {
     var _a, _b, _c, _d, _e, _f;
     const [selectMode, setSelectMode] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
@@ -787,12 +852,11 @@ function CustomerGroup({ name, invoices, canEdit, onOpenNotes, onTogglePriority,
                         ")"))))),
             React.createElement("div", { className: "grid grid-cols-12 gap-2 px-4 py-1.5 text-[10px] uppercase tracking-wide text-stone-500" },
                 React.createElement("div", { className: "col-span-3" }, "Invoice #"),
-                React.createElement("div", { className: "col-span-2" }, "PO"),
+                React.createElement("div", { className: "col-span-3" }, "PO"),
                 React.createElement("div", { className: "col-span-2" }, "Invoice Date"),
                 React.createElement("div", { className: "col-span-1" }, "Age"),
-                React.createElement("div", { className: "col-span-2 text-right" }, "Balance"),
-                React.createElement("div", { className: "col-span-2 text-right" }, "Flag")),
-            invoices.map(inv => (React.createElement(InvoiceRow, { key: inv.id, inv: inv, canEdit: canEdit, onOpenNotes: onOpenNotes, onTogglePriority: onTogglePriority, noteCount: notesCountMap[inv.id] || 0, selectMode: selectMode, selected: selected.has(inv.id), onToggleSelect: toggleSelect }))))),
+                React.createElement("div", { className: "col-span-3 text-right" }, "Balance")),
+            invoices.map(inv => (React.createElement(InvoiceRow, { key: inv.id, inv: inv, canEdit: canEdit, onOpenNotes: onOpenNotes, noteCount: notesCountMap[inv.id] || 0, selectMode: selectMode, selected: selected.has(inv.id), onToggleSelect: toggleSelect }))))),
         bulkModalOpen && (React.createElement(BulkNoteModal, { customerName: name, invoiceIds: [...selected], profile: profile, onClose: () => setBulkModalOpen(false), onSubmit: handleBulkSubmit }))));
 }
 /* ============================================================
@@ -1767,13 +1831,6 @@ function Dashboard({ profile, onSignOut }) {
         await db.from('notes').insert(rows);
         loadNoteCounts();
     }
-    async function togglePriority(inv) {
-        await db.from('invoices').update({
-            is_priority: !inv.is_priority,
-            priority_set_by: !inv.is_priority ? profile.display_name : null,
-            priority_set_at: !inv.is_priority ? new Date().toISOString() : null,
-        }).eq('id', inv.id);
-    }
     async function assignCustomer(customerId, personId) {
         await db.from('customers').update({ assigned_to: personId || null }).eq('id', customerId);
         loadInvoices();
@@ -1832,7 +1889,6 @@ function Dashboard({ profile, onSignOut }) {
         }
         return entries;
     }, [filtered, sortMode]);
-    const priorityInvoices = useMemo(() => invoices.filter(i => i.is_priority), [invoices]);
     const totalBalance = useMemo(() => invoices.reduce((s, i) => s + Number(i.open_balance || 0), 0), [invoices]);
     const asOfDate = useMemo(() => {
         if (invoices.length === 0)
@@ -1942,7 +1998,7 @@ function Dashboard({ profile, onSignOut }) {
                                 style: { background: "rgba(255,255,255,0.22)", color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.45)", border: "1px solid rgba(255,255,255,0.4)", backdropFilter: "blur(2px)" }
                             }, fmtMoneyRounded(bucketTotals[key]))));
                     }))))),
-            React.createElement(PriorityAlarm, { invoices: priorityInvoices, onOpen: openNotes, onUnflag: togglePriority, canEdit: canEdit, onOpenCollectionsUpdate: () => setCollectionsUpdateOpen(true) }),
+            React.createElement(TopOfMind, { profile: profile, onOpenCollectionsUpdate: () => setCollectionsUpdateOpen(true) }),
             React.createElement("div", { className: "relative left-1/2 right-1/2 -mx-[50vw] w-screen" },
                 React.createElement("div", { style: {
                         background: "linear-gradient(90deg, transparent 0%, transparent calc(50% - 40rem), var(--bg-0) calc(50% - 36rem), var(--bg-0) calc(50% + 36rem), transparent calc(50% + 40rem), transparent 100%)"
@@ -1967,7 +2023,7 @@ function Dashboard({ profile, onSignOut }) {
                                 customerFilter && (React.createElement("button", { className: "btn btn-ghost", onClick: () => setCustomerFilter("") }, "Show All Customers \u2715"))),
                             loading ? (React.createElement("div", { className: "text-center text-stone-500 py-20" }, "Loading receivables\u2026")) : grouped.length === 0 ? (React.createElement("div", { className: "text-center text-stone-500 py-20 glass rounded-xl" },
                                 "No invoices yet. ",
-                                canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, onTogglePriority: togglePriority, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes, onAssignCustomer: assignCustomer, onOpenDaysToPay: openDaysToPay })))))))))),
+                                canEdit ? "Upload this week's aged AR to get started." : "Ask an editor to upload this week's aged AR.")) : (grouped.map(([name, list]) => (React.createElement(CustomerGroup, { key: name, name: name, invoices: list, canEdit: canEdit, onOpenNotes: openNotes, notesCountMap: counts, isOpen: openCustomers.has(name), onToggleOpen: () => toggleCustomerOpen(name), onBulkAddNote: addNoteBulk, profile: profile, onViewCustomerNotes: viewCustomerNotes, onAssignCustomer: assignCustomer, onOpenDaysToPay: openDaysToPay })))))))))),
         selectedInvoice && (React.createElement(NotesPanel, { invoice: selectedInvoice, notes: notesByInvoice[selectedInvoice.id] || [], profile: profile, canEdit: canEdit, onClose: () => setSelectedInvoice(null), onAddNote: addNote, onDeleteNote: deleteNote })),
         notesModal && (React.createElement(CustomerNotesModal, { customerName: notesModal.customerName, invoices: notesModal.invoices, onClose: () => setNotesModal(null), onGoToInvoices: () => { jumpToCustomer(notesModal.customerName); setNotesModal(null); }, canEdit: canEdit })),
         recentNotesOpen && (React.createElement(RecentNotesModal, { onClose: () => setRecentNotesOpen(false), onOpenCustomer: (name) => { jumpToCustomer(name); setRecentNotesOpen(false); } })),
